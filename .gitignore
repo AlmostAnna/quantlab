@@ -1,0 +1,14 @@
+# Jupyter
+.ipynb_checkpoints/
+__pycache__/
+
+# Outputs
+*.png
+*.gif
+*.pt
+*.pth
+
+# OS
+.DS_Store
+Thumbs.db
+
