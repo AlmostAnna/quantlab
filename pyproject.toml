@@ -1,0 +1,29 @@
+# pyproject.toml
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quantlab"
+version = "0.1.0"
+description = "Personal research lab for quantitative finance and machine learning"
+authors = [{name = "AlmostAnna"}]
+license = {text = "MIT"}
+requires-python = ">=3.9"
+dependencies = [
+    "numpy",
+    "scipy",
+    "torch",
+    "matplotlib",
+]
+
+[project.optional-dependencies]
+dev = [
+    "jupyterlab",
+    "ipykernel",
+#    "pytest",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
