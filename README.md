@@ -1,2 +1,59 @@
 # quantlab
-A personal research repository exploring quantitative finance, model risk, and machine learning for derivatives pricing and hedging.
+
+A personal research repository exploring **quantitative finance**, **model risk**, and **machine learning for derivatives pricing and hedging**.
+
+> 🔍 **Note**: This project is *unrelated* to [QuantLib.org](https://www.quantlib.org/). It is a private learning and experimentation space by [AlmostAnna](https://github.com/AlmostAnna).
+
+---
+
+## What’s Inside
+
+This repo contains:
+- **Classical models**: Black-Scholes, Heston, local volatility
+- **Exotic derivatives**: Autocallables, Asian options, structured notes
+- **Hedging analysis**: Error decomposition, stop-loss replication, discrete trading
+- **Machine learning**: Buehler-style deep hedging with transaction costs
+- **Stress testing**: Sensitivity to volatility misspecification, rebalancing frequency
+
+All code is organized to support **reuse**, **clarity**, and **diagnostics**—not just one-off experiments.
+
+---
+
+## Structure
+```
+quantlab/ 
+├── notebooks/  
+│ ├── models/ # Stochastic volatility, Dupire, etc. 
+│ ├── model_risk/ # Hedging errors, replication failure, Greeks 
+│ └── ml/ # Deep hedging, training diagnostics 
+├── src/ # Reusable quant primitives (installable as 'quantlab') 
+│ ├── models/  
+│ ├── payoffs/ # Vanilla and exotic payoff logic 
+│ └── hedging/ # Analytic Greeks, naive strategies 
+├── ml/ # ML-specific training, models, and evaluation 
+├── pyproject.toml # For editable install 
+└── requirements.txt
+```
+
+---
+
+## Getting Started
+
+1. Clone and install:
+   ```bash
+   git clone https://github.com/AlmostAnna/quantlab.git
+   cd quantlab
+   pip install -e .[dev]
+   ```
+
+---
+## Philosophy
+
+- Clarity over cleverness: Code should speak for itself.
+- Model risk matters: Every assumption is surfaced and tested.
+- ML as a tool, not a black box: Diagnostics, baselines, and stress tests are first-class citizens.
+
+© 2025 AlmostAnna — For learning, reflection, and professional growth.
+
+
+
