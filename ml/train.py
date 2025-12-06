@@ -1,7 +1,7 @@
 # ml/train.py
 import torch
 from ml.config import GBMConfig, HedgingConfig
-from ml.sim.gbm import simulate_gbm
+from quantlab.models.gbm import simulate_gbm
 from ml.models.hedge_net import HedgeNet
 from ml.metrics.pnl import compute_pnl_with_tx
 
