@@ -11,6 +11,20 @@ class GBMConfig:
     M: int = 50
 
 @dataclass
+class HestonConfig:
+    S0: float = 100.0 
+    v0: float = 0.04 
+    r: float = 0.05 
+    q: float = 0.0 
+    kappa: float = 2.0
+    theta: float = 0.04 
+    eta: float = 0.3 
+    rho: float = -0.7
+    T: float = 1.0
+    N: int = 20000 
+    M: int = 50
+
+@dataclass
 class HedgingConfig:
     K: float = 100.0
     lambda_tx: float = 0.05
