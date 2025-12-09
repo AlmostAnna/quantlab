@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 
+
 def simulate_heston_paths(S0: float, v0: float, r: float, q: float, kappa: float, theta: float, eta: float, rho: float, T: float, N: int, M: int, device: str = 'cpu'):
     dt = T / M
     Z1 = torch.randn(N, M, device=device)
@@ -25,4 +26,7 @@ def simulate_heston_paths(S0: float, v0: float, r: float, q: float, kappa: float
         S[:, t+1] = S[:, t] + drift_S + diffusion_S
 
     return S, v
+
+
+
 

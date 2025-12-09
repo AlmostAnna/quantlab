@@ -4,11 +4,11 @@ import argparse
 
 import torch
 from ml.config import GBMConfig, HestonConfig, HedgingConfig
-from quantlab.models.gbm import simulate_gbm
-from quantlab.models.heston import simulate_heston_paths
+from quantlab.sim.gbm import simulate_gbm
+from quantlab.sim.heston.paths import simulate_heston_paths
 
-from ml.models.hedge_net import HedgeNet
-from ml.metrics.pnl import compute_pnl_with_tx
+from quantlab.ml.models.hedge_net import HedgeNet
+from quantlab.ml.metrics.pnl import compute_pnl_with_tx
 
 def prepare_inputs(S, K, T, M, device='cpu'):
     t_grid = torch.linspace(0, T - T/M, M, device=device)
