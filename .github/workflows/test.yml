@@ -25,35 +25,26 @@ jobs:
       uses: conda-incubator/setup-miniconda@v2
       with:
         miniforge-version: latest
+        environment-file: environment.yml
         activate-environment: quantlab
         use-mamba: true
+        auto-activate-base: false
 
-    - name: Clean conda cache
-      run: |
-        conda clean --all --force-pkgs-dirs --yes
-
-    - name: Install dependencies
+    - name: Update environment
       run: |
         mamba env update -f environment.yml
-        conda activate quantlab
+      shell: bash -l {0}
 
     - name: Verify installation
       run: |
-        conda activate quantlab
-        conda list
-        python -c "import torch; import numpy; print('Dependencies imported successfully')"
+        python -c "import torch; import numpy; import matplotlib; print('Dependencies imported successfully')"
+        python -c "import quantlab; print('Package imported successfully')"
+      shell: bash -l {0}
 
     - name: Run tests
       run: |
-        conda activate quantlab
         pytest tests/ -v --cov=src --cov-report=xml --cov-report=term
+      shell: bash -l {0}
 
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v3
-      with:
-        file: ./coverage.xml
-        flags: unittests
-        name: codecov-umbrella
-        fail_ci_if_error: false
 
 
