@@ -23,7 +23,9 @@ dependencies:
     - numba
     - QuantLib
     - statsmodels
-
+    - pytest
+    - pytest-cov
+    - -e .          # install quantlab package in editable mode
 
 #  - tqdm
 

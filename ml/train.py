@@ -4,8 +4,8 @@ import argparse
 
 import torch
 from ml.config import GBMConfig, HestonConfig, HedgingConfig
-from quantlab.sim.gbm import simulate_gbm
-from quantlab.sim.heston.paths import simulate_heston_paths
+from quantlab.sim.gbm import simulate_gbm_torch as simulate_gbm
+from quantlab.sim.heston.paths import simulate_heston_paths_torch as simulate_heston_paths
 
 from quantlab.ml.models.hedge_net import HedgeNet
 from quantlab.ml.metrics.pnl import compute_pnl_with_tx

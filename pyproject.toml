@@ -15,15 +15,42 @@ dependencies = [
     "scipy",
     "torch",
     "matplotlib",
+    "py_vollib",
 ]
 
 [project.optional-dependencies]
 dev = [
     "jupyterlab",
     "ipykernel",
-#    "pytest",
+    "pytest",
+    "QuantLib",
 ]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+filterwarnings = [
+    "error",                     # Turn warnings into errors (fail CI on deprecations)
+    "ignore::UserWarning",       # Optional: relax for specific cases
+]
+addopts = """
+    --strict-markers
+    --tb=short
+    --doctest-modules
+    --cov=src/quantlab
+    --cov-report=term-missing
+    --cov-report=html
+"""
+markers = [
+    "unit: Unit tests (fast, isolated)",
+    "integration: Integration tests (slower, cross-module)",
+    "ml: Machine learning-specific tests",
+    "slow: Tests that take >1s (skip by default)",
+]
 
