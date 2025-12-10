@@ -25,6 +25,7 @@ dependencies:
     - statsmodels
     - pytest
     - pytest-cov
+    - pre-commit
     - -e .          # install quantlab package in editable mode
 
 #  - tqdm
@@ -32,4 +33,3 @@ dependencies:
 # Set environment variables
 variables:
   KMP_DUPLICATE_LIB_OK: TRUE
-
