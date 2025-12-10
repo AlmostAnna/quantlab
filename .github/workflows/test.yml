@@ -13,12 +13,24 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Free up disk space
+      run: |
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /opt/ghc
+        sudo rm -rf "/usr/local/share/boost"
+        sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+        df -h
+
     - name: Setup Mambaforge
       uses: conda-incubator/setup-miniconda@v2
       with:
         miniforge-version: latest
         activate-environment: quantlab
         use-mamba: true
+
+    - name: Clean conda cache
+      run: |
+        conda clean --all --force-pkgs-dirs --yes
 
     - name: Install dependencies
       run: |
@@ -29,7 +41,7 @@ jobs:
       run: |
         conda activate quantlab
         conda list
-        python -c "import torch; import numpy; import matplotlib; print('Dependencies imported successfully')"
+        python -c "import torch; import numpy; print('Dependencies imported successfully')"
 
     - name: Run tests
       run: |
@@ -43,5 +55,5 @@ jobs:
         flags: unittests
         name: codecov-umbrella
         fail_ci_if_error: false
-        
+
 
