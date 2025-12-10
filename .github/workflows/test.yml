@@ -9,9 +9,6 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: [3.10]
 
     steps:
     - uses: actions/checkout@v4
@@ -21,7 +18,6 @@ jobs:
       with:
         miniforge-version: latest
         activate-environment: quantlab
-        python-version: ${{ matrix.python-version }}
         use-mamba: true
 
     - name: Install dependencies
@@ -40,11 +36,12 @@ jobs:
         conda activate quantlab
         pytest tests/ -v --cov=src --cov-report=xml --cov-report=term
 
-    - name: Upload coverage to Codecov 
+    - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
       with:
         file: ./coverage.xml
         flags: unittests
         name: codecov-umbrella
         fail_ci_if_error: false
+        
 
