@@ -1,0 +1,50 @@
+name: Tests
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.10]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Mambaforge
+      uses: conda-incubator/setup-miniconda@v2
+      with:
+        miniforge-version: latest
+        activate-environment: quantlab
+        python-version: ${{ matrix.python-version }}
+        use-mamba: true
+
+    - name: Install dependencies
+      run: |
+        mamba env update -f environment.yml
+        conda activate quantlab
+
+    - name: Verify installation
+      run: |
+        conda activate quantlab
+        conda list
+        python -c "import torch; import numpy; import matplotlib; print('Dependencies imported successfully')"
+
+    - name: Run tests
+      run: |
+        conda activate quantlab
+        pytest tests/ -v --cov=src --cov-report=xml --cov-report=term
+
+    - name: Upload coverage to Codecov 
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+
