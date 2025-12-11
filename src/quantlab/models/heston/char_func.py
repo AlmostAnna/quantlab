@@ -1,61 +1,78 @@
-import torch
+"""
+Heston characteristic function.
+
+This module contains implementation of the log(E[exp(i*u*log(S_T))]).
+"""
+
 import numpy as np
 
 
-def heston_char_func_log(u: float, tau: float, r: float, kappa: float, theta: float, sigma: float, rho: float, v0: float, S0: float):
-    """
-    Log of the Heston characteristic function.
-    Returns log(φ(u)) = C + D*v0 + i*u*log(S0)
-    """
-    u = np.asarray(u, dtype=complex)
-    iu = 1j * u
+def heston_char_func_log(u, tau, r, kappa, theta, sigma, rho, v0, S0):
+    """Heston characteristic function.
 
-    # Riccati coefficients
-    alpha = -0.5 * (u**2 + iu)
-    beta = kappa - rho * sigma * iu
+    Computes the log of the characteristic function for log(S_T),
+    i.e., log(E[exp(i*u*log(S_T))]).
+    """
+    # Ensure u is treated as complex
+    u_complex = np.asarray(u, dtype=complex)
+    i = 1j
+
+    # --- Heston Model Parameters for Characteristic Function ---
+    # For the log-price process X_t = log(S_t),
+    # dX_t = (r - 0.5*v_t) dt + sqrt(v_t) dW_t^S
+    # dv_t = kappa*(theta - v_t) dt + sigma*sqrt(v_t) dW_t^v
+    # d<W^S, W^v>_t = rho dt
+
+    # Coefficients for the Riccati equations solution
+    # dX_t = (r - 0.5*v_t) dt + ...
+    alpha = -0.5 * u_complex * (u_complex + i)  # Note: This is -0.5*(u^2 + i*u)
+    beta = kappa - rho * sigma * i * u_complex
     gamma = 0.5 * sigma**2
 
     # Discriminant
-    disc = beta**2 - 4.0 * alpha * gamma
-    d = np.sqrt(disc)
+    d_discriminant = np.sqrt(beta**2 - 4 * alpha * gamma)
 
-    # --- Enforce Re(d) >= 0 (critical for stability) ---
-    if np.real(d) < 0:
-        d = -d
+    # Ensure the square root has a positive real part for convergence
+    # This choice determines which branch of the solution to take
+    if np.real(d_discriminant) < 0:
+        d_discriminant = -d_discriminant
 
-    # Handle g = (beta - d)/(beta + d)
-    denom = beta + d
-    if np.abs(denom) < 1e-14:
-        g = 0.0
+    # --- D and C functions ---
+    g = (beta - d_discriminant) / (beta + d_discriminant)
+
+    exp_d_tau = np.exp(-d_discriminant * tau)
+
+    # Calculate D(t, tau, u)
+    denom_D = 1 - g * exp_d_tau
+    # Handle potential division by zero in D
+    if np.abs(denom_D) < 1e-15:
+        # L'Hôpital's rule approximation for small denominator
+        D = (beta - d_discriminant) / (2 * gamma) * tau
     else:
-        g = (beta - d) / denom
+        D = (beta - d_discriminant) / (2 * gamma) * (1 - exp_d_tau) / denom_D
 
-    # Exponential term
-    exp_d_tau = np.exp(-d * tau)
+    # Calculate C(t, tau, u)
+    # Part 1: Drift term
+    C_drift = i * u_complex * (np.log(S0) + r * tau)
 
-    # D function
-    denom_D = 1.0 - g * exp_d_tau
-    if np.abs(denom_D) < 1e-14:
-        # Use limit as g*exp → 1
-        D = (beta - d) / sigma**2 * tau
+    # Part 2: Mean-reversion term
+    # C_mean_rev = (kappa * theta / sigma^2) * [(beta - d_discriminant)*tau
+    # - 2*log((1-g*exp_d_tau)/(1-g))]
+    log_fraction = (1 - g * exp_d_tau) / (1 - g)
+
+    # Handle potential numerical issues in the logarithm
+    if np.abs(1 - g) < 1e-10:
+        safe_log_fraction = log_fraction if np.abs(log_fraction) > 1e-15 else 1e-15 + 0j
+        log_term = np.log(safe_log_fraction)
     else:
-        D = (beta - d) / sigma**2 * (1.0 - exp_d_tau) / denom_D
+        # Standard case
+        log_term = np.log(log_fraction)
 
-    # C function: careful with log argument
-    log_num = 1.0 - g * exp_d_tau
-    log_den = 1.0 - g
-    if np.abs(log_den) < 1e-14:
-        # Series expansion: log((1 - g*e^{-dτ})/(1 - g)) ≈ -g*(1 - e^{-dτ})/(1 - g) → τ*(beta - d)/2
-        log_arg = tau * (beta - d) / 2.0
-    else:
-        log_arg = log_num / log_den
-        if np.abs(log_arg) < 1e-14:
-            log_arg = 1e-14
-        log_arg = np.log(log_arg)
+    C_mean_rev = (kappa * theta / sigma**2) * (
+        (beta - d_discriminant) * tau - 2 * log_term
+    )
 
-    C = r * iu * tau + (kappa * theta / sigma**2) * ((beta - d) * tau - 2.0 * log_arg)
+    C = C_drift + C_mean_rev
 
-    return C + D * v0 + iu * np.log(S0)
-
-
-
+    # Return log(phi(u))
+    return C + D * v0
