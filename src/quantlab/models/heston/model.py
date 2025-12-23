@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 import numpy as np
 import torch
+from scipy.stats import ncx2
 
 from quantlab.market_data.market_state import MarketState
 
@@ -16,8 +17,9 @@ class HestonParameters:
     """
     Represents the parameters of the Heston model.
 
-    The model is defined by the system of stochastic differential equations:
-    dS_t = μS_t dt + √v_t S_t dW_t^S,
+    The model is defined by the system of stochastic differential equations
+    under risk-neutral measure:
+    dS_t = (r-q)S_t dt + √v_t S_t dW_t^S,
     dv_t = κ(θ - v_t)dt + η√v_t dW_t^v,
     dW_t^S dW_t^v = ρ dt.
 
@@ -49,6 +51,9 @@ def _evolve_numpy(
     """
     Evolve the Heston process by one time step using Numpy.
 
+    Current implementation uses Euler evolution for S,
+    exact CIR evolution for v.
+
     Args:
         s_t: Current stock price S_t.
         v_t: Current variance v_t.
@@ -56,7 +61,7 @@ def _evolve_numpy(
         dt: Time increment dt.
         dw_s: Increment of the stock price Brownian motion (dW_t^S).
         dw_v: Increment of the variance Brownian motion (dW_t^v).
-              These should be correlated with correlation rho.
+              These should be independent normals.
         params (HestonParameters): The model parameters.
         market_state (MarketState): The current market state.
 
@@ -65,17 +70,31 @@ def _evolve_numpy(
         and variance v_{t+dt} after the time step.
     """
     # Use NumPy operations
-    kappa, theta, eta, r = (
-        params.kappa,
-        params.theta,
-        params.eta,
-        market_state.interest_rate,
+    r = market_state.interest_rate
+    kappa, theta, eta, rho = params.kappa, params.theta, params.eta, params.rho
+
+    # 1. Evolve S using the log-Euler step
+    # This assumes dw_s and dw_v are independent N(0,1) increments.
+    # The correlated S increment is rho * dw_v + sqrt(1 - rho**2) * dw_s
+    s_tpdt = s_t * np.exp(
+        (r - 0.5 * v_t) * dt
+        + np.sqrt(v_t * dt) * (rho * dw_v + np.sqrt(1 - rho**2) * dw_s)
     )
-    ds = r * s_t * dt + np.sqrt(np.maximum(v_t, 0)) * s_t * dw_s
-    s_tpdt = s_t + ds
-    dv = kappa * (theta - v_t) * dt + eta * np.sqrt(np.maximum(v_t, 0)) * dw_v
-    v_tpdt = v_t + dv
-    v_tpdt = np.maximum(v_tpdt, 0)
+
+    # 2. Evolve v using the exact CIR scheme
+    exp_kappa_dt = np.exp(-kappa * dt)
+    c1 = eta**2 * (1 - exp_kappa_dt) / (4 * kappa)
+    c2 = 4 * kappa * exp_kappa_dt / (eta**2 * (1 - exp_kappa_dt))
+    d = 4 * kappa * theta / eta**2
+
+    # Calculate non-centrality parameter
+    lam = c2 * v_t
+    # Draw from non-central chi-squared
+    chi2_val = ncx2.rvs(d, lam)
+
+    # Calculate v_{t+dt}
+    v_tpdt = c1 * chi2_val
+
     return s_tpdt, v_tpdt
 
 
@@ -99,7 +118,6 @@ def _evolve_torch(
         dt: Time increment dt.
         dw_s: Increment of the stock price Brownian motion (dW_t^S).
         dw_v: Increment of the variance Brownian motion (dW_t^v).
-              These should be correlated with correlation rho.
         params (HestonParameters): The model parameters.
         market_state (MarketState): The current market state.
 
@@ -108,17 +126,25 @@ def _evolve_torch(
         and variance v_{t+dt} after the time step.
     """
     # Use PyTorch operations
-    kappa, theta, eta, r = (
-        params.kappa,
-        params.theta,
-        params.eta,
-        market_state.interest_rate,
+    r = market_state.interest_rate
+    kappa, theta, eta, rho = params.kappa, params.theta, params.eta, params.rho
+
+    # 1. Evolve S using the log-Euler step
+    # This assumes dw_s and dw_v are independent N(0,1) increments.
+    # The correlated S increment is rho * dw_v + sqrt(1 - rho**2) * dw_s
+
+    s_tpdt = s_t * torch.exp(
+        (r - 0.5 * v_t) * dt
+        + torch.sqrt(torch.clamp_min(v_t, 0.0))
+        * torch.sqrt(dt)
+        * (rho * dw_v + torch.sqrt(1 - rho**2) * dw_s)
     )
-    ds = r * s_t * dt + torch.sqrt(torch.clamp_min(v_t, 0)) * s_t * dw_s
-    s_tpdt = s_t + ds
-    dv = kappa * (theta - v_t) * dt + eta * torch.sqrt(torch.clamp_min(v_t, 0)) * dw_v
+
+    # Euler for v
+    dv = kappa * (theta - v_t) * dt + eta * torch.sqrt(torch.clamp_min(v_t, 0.0)) * dw_v
     v_tpdt = v_t + dv
-    v_tpdt = torch.clamp_min(v_tpdt, 0)
+    v_tpdt = torch.clamp_min(v_tpdt, 0.0)  # Ensure non-negativity
+
     return s_tpdt, v_tpdt
 
 
@@ -148,9 +174,9 @@ class HestonProcess:
     dW_t^S dW_t^V = ρ dt.
 
     Attributes:
-        model_params: The HestonParameters inst
-        market_state: The MarketState instance providing the current risk-free rate (r),
-                      dividend yield (q), and initial stock price (S0).
+        model_params: The HestonParameters instance
+        market_state: The MarketState instance providing the current risk-free rate (r)
+                      and initial stock price (S0).
     """
 
     def __init__(
@@ -187,9 +213,10 @@ class HestonProcess:
           v_t: Current variance v_t.
           t: Current time t.
           dt: Time increment dt.
-          dw_s: Increment of the stock price Brownian motion (dW_t^S).
-          dw_v: Increment of the variance Brownian motion (dW_t^v).
-                These should be correlated with correlation rho.
+          dw_s: Independent standard normal increment for S (perpendicular to v's BM).
+          dw_v: Independent standard normal increment for v.
+                The correlated increment for S will be
+                rho * dw_v + sqrt(1-rho^2) * dw_s.
 
         Returns:
             A tuple (s_tpdt, v_tpdt) representing the stock price S_{t+dt}
