@@ -7,7 +7,6 @@ from dataclasses import dataclass
 
 import numpy as np
 import torch
-from scipy.stats import ncx2
 
 from quantlab.market_data.market_state import MarketState
 
@@ -51,8 +50,8 @@ def _evolve_numpy(
     """
     Evolve the Heston process by one time step using Numpy.
 
-    Current implementation uses Euler evolution for S,
-    exact CIR evolution for v.
+    Current implementation uses Euler evolution for both S
+    and v.
 
     Args:
         s_t: Current stock price S_t.
@@ -81,19 +80,14 @@ def _evolve_numpy(
         + np.sqrt(v_t * dt) * (rho * dw_v + np.sqrt(1 - rho**2) * dw_s)
     )
 
-    # 2. Evolve v using the exact CIR scheme
-    exp_kappa_dt = np.exp(-kappa * dt)
-    c1 = eta**2 * (1 - exp_kappa_dt) / (4 * kappa)
-    c2 = 4 * kappa * exp_kappa_dt / (eta**2 * (1 - exp_kappa_dt))
-    d = 4 * kappa * theta / eta**2
-
-    # Calculate non-centrality parameter
-    lam = c2 * v_t
-    # Draw from non-central chi-squared
-    chi2_val = ncx2.rvs(d, lam)
-
-    # Calculate v_{t+dt}
-    v_tpdt = c1 * chi2_val
+    # 2. Evolve v using the Euler step
+    dv = (
+        kappa * (theta - v_t) * dt
+        + eta * np.sqrt(np.maximum(v_t, 0.0)) * np.sqrt(dt) * dw_v
+    )
+    v_tpdt = v_t + dv
+    # Ensure variance stays non-negative (standard fix for Euler)
+    v_tpdt = np.maximum(v_tpdt, 0.0)
 
     return s_tpdt, v_tpdt
 
