@@ -1,35 +1,78 @@
+"""
+Greeks.
+
+This module contains implementations of greeks calculations in different models.
+"""
 import numpy as np
-from quantlab.sim.heston.mc_pricer import heston_exact_mc_price_with_paths
+
+from quantlab.instruments.base import StockOption
+from quantlab.market_data.market_state import MarketState
+from quantlab.models.heston.model import HestonProcess
+from quantlab.sim.heston.mc_pricer import heston_euler_mc_price_with_paths
 
 
-def heston_delta_bump_revalue(S0, K, T, r, kappa, theta, sigma, rho, v0,
-                              n_paths=100000, n_steps=500, bump_size=0.01, seed=42):
+def heston_delta_bump_revalue(
+    option: StockOption,
+    process: HestonProcess,
+    n_paths: int = 100000,
+    n_steps: int = 500,
+    bump_size: float = 0.01,
+    seed: int = 42,
+):
     """
     Compute delta using bump-and-revalue with common random numbers.
-    bump_size: e.g., 0.01 for 1% bump (S0 = 1.0 → bump = 0.01)
+
+    Args:
+        option: Stock option to price.
+        process: Underlying dynamics.
+        n_paths: The number of paths to generate.
+        n_steps: The number of steps in each path.
+        bump_size: size of the bump, e.g., 0.01 for 1% bump for S0=1
+        seed: The seed for np.random.
+
+    Returns:
+        A price for the StockOption option.
     """
     np.random.seed(seed)
-    dt = T / n_steps
 
     # Pre-generate ALL random numbers (CRN)
     Z1_base = np.random.randn(n_paths, n_steps)
     Z2_base = np.random.randn(n_paths, n_steps)
 
     # Base price
-    C0 = heston_exact_mc_price_with_paths(
-        S0, K, T, r, kappa, theta, sigma, rho, v0, Z1_base, Z2_base, n_steps
-    )
+    base_process = process
+    base_market_state = base_process.market_state
+    S0 = base_market_state.stock_price
+
+    C0 = heston_euler_mc_price_with_paths(option, process, Z1_base, Z2_base, n_steps)
 
     # Up bump
-    C_up = heston_exact_mc_price_with_paths(
-        S0 + bump_size, K, T, r, kappa, theta, sigma, rho, v0, Z1_base, Z2_base, n_steps
+    up_market_state = MarketState(
+        stock_price=S0 + bump_size,
+        interest_rate=base_market_state.interest_rate,
+        time=base_market_state.time,
+    )
+    up_process = HestonProcess(
+        model_params=base_process.model_params, market_state=up_market_state
+    )
+
+    C_up = heston_euler_mc_price_with_paths(
+        option, up_process, Z1_base, Z2_base, n_steps
     )
 
     # Down bump
-    C_down = heston_exact_mc_price_with_paths(
-        S0 - bump_size, K, T, r, kappa, theta, sigma, rho, v0, Z1_base, Z2_base, n_steps
+    down_market_state = MarketState(
+        stock_price=S0 - bump_size,
+        interest_rate=base_market_state.interest_rate,
+        time=base_market_state.time,
+    )
+    down_process = HestonProcess(
+        model_params=base_process.model_params, market_state=down_market_state
+    )
+
+    C_down = heston_euler_mc_price_with_paths(
+        option, down_process, Z1_base, Z2_base, n_steps
     )
 
     delta = (C_up - C_down) / (2 * bump_size)
     return delta, C0, C_up, C_down
-

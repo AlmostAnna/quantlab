@@ -9,7 +9,7 @@ import numpy as np
 from quantlab.instruments.base import StockOption
 from quantlab.market_data.market_state import MarketState
 from quantlab.models.heston.model import HestonParameters, HestonProcess
-from quantlab.sim.heston.mc_pricer import heston_exact_mc_price
+from quantlab.sim.heston.mc_pricer import heston_euler_mc_price
 
 
 def test_heston_exact_mc_price_positive():
@@ -19,7 +19,7 @@ def test_heston_exact_mc_price_positive():
     process = HestonProcess(params, market_state)
     option = StockOption(strike_price=100.0, expiration_time=1.0, is_call=True)
 
-    price = heston_exact_mc_price(option, process)
+    price = heston_euler_mc_price(option, process)
 
     assert price > 0.0
     assert price < 100.0  # can't be worth more than underlying
@@ -36,7 +36,7 @@ def test_heston_exact_mc_price_atm_convergence():
     process = HestonProcess(params, market_state)
     option = StockOption(strike_price=100.0, expiration_time=T_short, is_call=True)
 
-    price = heston_exact_mc_price(
+    price = heston_euler_mc_price(
         option, process, n_paths=100000, n_steps=100
     )  # Increase paths for stability
 
