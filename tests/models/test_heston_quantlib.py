@@ -10,7 +10,10 @@ This module contains tests to ensure prices are consistent with baseline.
 
 import pytest
 
+from quantlab.instruments.base import StockOption
+from quantlab.market_data.market_state import MarketState
 from quantlab.models.heston.closed_form import heston_call_price
+from quantlab.models.heston.model import HestonParameters, HestonProcess
 
 # Optional import: skip test if QuantLib not available
 ql = pytest.importorskip("QuantLib")
@@ -23,7 +26,7 @@ def heston_call_price_QL(
     q=0.0,
     kappa=1.0,
     theta=0.04,
-    sigma=0.3,
+    eta=0.3,
     rho=-0.5,
     v0=0.04,
     S0=100,
@@ -44,7 +47,7 @@ def heston_call_price_QL(
     # Heston process
     spot_handle = ql.QuoteHandle(ql.SimpleQuote(S0))
     heston_process = ql.HestonProcess(
-        risk_free, dividend, spot_handle, v0, kappa, theta, sigma, rho
+        risk_free, dividend, spot_handle, v0, kappa, theta, eta, rho
     )
     heston_model = ql.HestonModel(heston_process)
     engine = ql.AnalyticHestonEngine(heston_model)
@@ -65,26 +68,33 @@ def prices_close(a, b, abs_tol=1e-4, rel_tol=1e-3):
 
 
 @pytest.mark.parametrize(
-    "kappa,theta,sigma,rho,v0,K,T",
+    "kappa,theta,eta,rho,v0,K,T",
     [
         (1.0, 0.04, 0.3, -0.5, 0.04, 100, 1.0),  # Heston 1993
         (2.0, 0.05, 0.2, -0.7, 0.06, 90, 0.5),  # OTM
         (0.5, 0.03, 0.4, -0.3, 0.02, 110, 2.0),  # ITM, long-dated
     ],
 )
-def test_heston_vs_quantlib_parametrized(kappa, theta, sigma, rho, v0, K, T):
+def test_heston_vs_quantlib_parametrized(kappa, theta, eta, rho, v0, K, T):
     """Test closeness of prices."""
-    price = heston_call_price(
-        S0=100,
-        K=K,
-        T=T,
-        r=0.0,  # q=0.0,
-        kappa=kappa,
-        theta=theta,
-        sigma=sigma,
-        rho=rho,
-        v0=v0,
-    )
+    market_state = MarketState(stock_price=100.0, interest_rate=0.0, time=0.0)
+    params = HestonParameters(v0=v0, kappa=kappa, theta=theta, eta=eta, rho=rho)
+    process = HestonProcess(params, market_state)
+    option = StockOption(strike_price=K, expiration_time=T, is_call=True)
+
+    price = heston_call_price(option, process)
+
+    # price = heston_call_price(
+    #    S0=100,
+    #    K=K,
+    #    T=T,
+    #    r=0.0,  # q=0.0,
+    #    kappa=kappa,
+    #    theta=theta,
+    #    eta=eta,
+    #    rho=rho,
+    #    v0=v0,
+    # )
     price_ql = heston_call_price_QL(
         K=K,
         T=T,
@@ -92,7 +102,7 @@ def test_heston_vs_quantlib_parametrized(kappa, theta, sigma, rho, v0, K, T):
         q=0.0,
         kappa=kappa,
         theta=theta,
-        sigma=sigma,
+        eta=eta,
         rho=rho,
         v0=v0,
         S0=100,

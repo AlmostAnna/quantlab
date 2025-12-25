@@ -119,17 +119,7 @@ def test_heston_mc_vs_heston_analytical__parametrized(kappa, theta, eta, rho, v0
 
     price = heston_euler_mc_price(option, process, n_paths=500000, n_steps=1000)
 
-    price_an = heston_call_price(
-        S0=100,
-        K=K,
-        T=T,
-        r=0.0,  # q=0.0,
-        kappa=kappa,
-        theta=theta,
-        sigma=eta,
-        rho=rho,
-        v0=v0,
-    )
+    price_an = heston_call_price(option, process)
 
     assert prices_close(price, price_an)
 
