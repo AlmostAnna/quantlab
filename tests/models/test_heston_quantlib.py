@@ -1,4 +1,3 @@
-# tests/models/test_heston_quantlib.py
 # This module uses QuantLib (https://www.quantlib.org/),
 # licensed under the BSD 3-Clause License. See NOTICES for details.
 
@@ -9,62 +8,12 @@ This module contains tests to ensure prices are consistent with baseline.
 """
 
 import pytest
+from quantlib_helper import heston_call_price_QL, prices_close
 
 from quantlab.instruments.base import StockOption
 from quantlab.market_data.market_state import MarketState
 from quantlab.models.heston.closed_form import heston_call_price
 from quantlab.models.heston.model import HestonParameters, HestonProcess
-
-# Optional import: skip test if QuantLib not available
-ql = pytest.importorskip("QuantLib")
-
-
-def heston_call_price_QL(
-    K=100,
-    T=1.0,
-    r=0.0,
-    q=0.0,
-    kappa=1.0,
-    theta=0.04,
-    eta=0.3,
-    rho=-0.5,
-    v0=0.04,
-    S0=100,
-):
-    """Quantlib Heston call price for given parameters."""
-    # QuantLib setup
-    today = ql.Date().todaysDate()
-    ql.Settings.instance().evaluationDate = today
-
-    # Yield curves
-    risk_free = ql.YieldTermStructureHandle(
-        ql.FlatForward(today, r, ql.Actual365Fixed())
-    )
-    dividend = ql.YieldTermStructureHandle(
-        ql.FlatForward(today, q, ql.Actual365Fixed())
-    )
-
-    # Heston process
-    spot_handle = ql.QuoteHandle(ql.SimpleQuote(S0))
-    heston_process = ql.HestonProcess(
-        risk_free, dividend, spot_handle, v0, kappa, theta, eta, rho
-    )
-    heston_model = ql.HestonModel(heston_process)
-    engine = ql.AnalyticHestonEngine(heston_model)
-    # engine = ql.COSHestonEngine(heston_model, L=15)
-
-    option = ql.EuropeanOption(
-        ql.PlainVanillaPayoff(ql.Option.Call, K),
-        ql.EuropeanExercise(today + ql.Period(int(T * 365), ql.Days)),
-    )
-    option.setPricingEngine(engine)
-    ql_price = option.NPV()
-    return ql_price
-
-
-def prices_close(a, b, abs_tol=1e-4, rel_tol=1e-3):
-    """Values comparison function."""
-    return abs(a - b) <= max(abs_tol, rel_tol * max(abs(a), abs(b)))
 
 
 @pytest.mark.parametrize(
@@ -84,17 +33,6 @@ def test_heston_vs_quantlib_parametrized(kappa, theta, eta, rho, v0, K, T):
 
     price = heston_call_price(option, process)
 
-    # price = heston_call_price(
-    #    S0=100,
-    #    K=K,
-    #    T=T,
-    #    r=0.0,  # q=0.0,
-    #    kappa=kappa,
-    #    theta=theta,
-    #    eta=eta,
-    #    rho=rho,
-    #    v0=v0,
-    # )
     price_ql = heston_call_price_QL(
         K=K,
         T=T,
