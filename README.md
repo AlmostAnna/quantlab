@@ -26,13 +26,20 @@ quantlab/
 │ ├── models/ # Stochastic volatility, Dupire, etc. 
 │ ├── model_risk/ # Hedging errors, replication failure, Greeks 
 │ └── ml/ # Deep hedging, training diagnostics 
-├── src/ # Reusable quant primitives (installable as 'quantlab') 
-│ ├── models/  
-│ ├── payoffs/ # Vanilla and exotic payoff logic 
-│ └── hedging/ # Analytic Greeks, naive strategies 
-├── ml/ # ML-specific training, models, and evaluation 
+├── src/ # Reusable quant primitives (installable as 'quantlab')
+|   ├── quantlab/
+│      ├── hedging/ # Greeks, naive strategies
+|      ├── instruments/ 
+│      ├── market_data/ 
+|      ├── ml/ # Models, metrics
+|      ├── models/
+|      ├── pricing/
+|      ├── sim/ # MC simulations
+│      └── utils/  
+├── ml/ # ML-specific training and evaluation
+├── tests/ # Tests
 ├── pyproject.toml # For editable install 
-└── requirements.txt
+└── environment.yml
 ```
 
 ---
