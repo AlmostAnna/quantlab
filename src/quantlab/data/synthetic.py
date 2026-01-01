@@ -3,8 +3,6 @@ Market data simulators.
 
 This module contains implementation of various data simulators.
 """
-from typing import Tuple
-
 import numpy as np
 from py_vollib.black.implied_volatility import (
     implied_volatility_of_undiscounted_option_price,
@@ -29,7 +27,7 @@ def generate_heston_vol_surface(
     noise_level: float = 0.005,  # ±0.5% vol
     seed: int = None,
     pricing_method: str = "closed_form",
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Generate a synthetic implied volatility surface from the Heston model.
 
@@ -143,7 +141,7 @@ def generate_heston_bid_ask_spreads(
     maturities: np.ndarray,
     implied_vols: np.ndarray,
     bid_ask_half_width: float = 0.0025,  # ±25 bps
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Generate synthetic bid/ask spreads around a mid implied volatility surface.
 
