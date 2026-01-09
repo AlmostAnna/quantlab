@@ -16,6 +16,7 @@ Example Usage as a Script:
     python -m ml.train --data_type_model=heston
 """
 import argparse
+import os
 
 import torch
 
@@ -79,7 +80,8 @@ def main(args):
         if epoch % 100 == 0:
             print(f"Epoch {epoch}, Loss: {loss.item():.4f}")
 
-    torch.save(net.state_dict(), "hedge_net_tx.pth")
+    os.makedirs("artifacts", exist_ok=True)
+    torch.save(net.state_dict(), "artifacts/hedge_net_tx.pth")
     print("Model saved!")
 
 
