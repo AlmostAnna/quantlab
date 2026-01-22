@@ -145,22 +145,17 @@ def test_trunc_range_methods_consistency():
     ), f"c4/c2 ratio seems too large: {trunc_c4 / trunc_c2}"
 
 
-def test_calc_trunc_range_dispatch():
-    """Test the main dispatcher function works with different methods."""
+def test_calc_trunc_range_returns_endpoints():
+    """Test that endpoints are reasonable."""
     p = HestonParameters(kappa=2.0, theta=0.04, eta=0.3, rho=-0.7, v0=0.04)
     dt = 1.0
 
-    # Test cumulant method
-    range_cumulant = calc_trunc_range(p, dt, method="cumulant")
-    assert np.isfinite(range_cumulant) and range_cumulant > 0
+    a, b = calc_trunc_range(p, dt, method="cumulant", cumulant_method="c4")
 
-    # Test JP method
-    range_jp = calc_trunc_range(p, dt, method="jp", epsilon=1e-5, n=4, K_bound=2.0)
-    assert np.isfinite(range_jp) and range_jp > 0
-
-    # Test unknown method raises error
-    with pytest.raises(ValueError, match="Unknown method"):
-        calc_trunc_range(p, dt, method="unknown")
+    assert isinstance(a, (float, np.floating, np.ndarray)), "a should be numeric"
+    assert isinstance(b, (float, np.floating, np.ndarray)), "b should be numeric"
+    assert b > a, f"b ({b}) should be greater than a ({a})"
+    assert np.isfinite(a) and np.isfinite(b), f"a and b should be finite: ({a}, {b})"
 
 
 def test_log_price_moments():

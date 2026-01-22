@@ -207,14 +207,24 @@ def trunc_range_jp(dt, params: HestonParameters, epsilon=1e-6, n=4, K_bound=1.0)
 
 def calc_trunc_range(params, dt, method="jp", **kwargs):
     """General truncation range calculation."""
+    c1, c2, c4 = heston_cumulants(dt, params)
     if method == "cumulant":
         # Default to c4 rule
-        return trunc_range_cumulant(dt, params, method="c4")
+        half_width = trunc_range_cumulant(dt, params, method="c4")
+
+        a = c1 - half_width
+        b = c1 + half_width
+        return a, b
     elif method == "jp":
         epsilon = kwargs.get("epsilon", 1e-6)
         n = kwargs.get("n", 4)
         K_bound = kwargs.get("K_bound", 1.0)
-        return trunc_range_jp(dt, params, epsilon=epsilon, n=n, K_bound=K_bound)
+        half_width = trunc_range_jp(dt, params, epsilon=epsilon, n=n, K_bound=K_bound)
+
+        # Compute the interval [a, b] centered on c1
+        a = c1 - half_width
+        b = c1 + half_width
+        return a, b
     else:
         raise ValueError("Unknown method")
 
@@ -245,11 +255,10 @@ def price(
 
     dt = np.asarray(option.expiration_time - ms.time)
     mean_log_s_t = ms.interest_rate * dt
-    trunc_range = calc_trunc_range(params, dt, method=method)
+
+    trunc_lb, trunc_ub = calc_trunc_range(params, dt, method=method)
 
     x = np.log(ms.stock_price / option.strike_price)
-    trunc_lb = mean_log_s_t - trunc_range
-    trunc_ub = mean_log_s_t + trunc_range
     x_within_bounds = (x >= trunc_lb) & (x <= trunc_ub)
 
     # COS method
