@@ -33,5 +33,6 @@ repos:
         name: pytest
         entry: pytest tests/ -v
         language: system
+        args: ["-m", "not slow"]
         pass_filenames: false
         always_run: true

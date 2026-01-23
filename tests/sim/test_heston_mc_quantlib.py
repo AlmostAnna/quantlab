@@ -17,6 +17,7 @@ from quantlab.models.heston.model import HestonParameters, HestonProcess
 from quantlab.sim.heston.mc_pricer import heston_euler_mc_price
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "kappa,theta,eta,rho,v0,K,T",
     [
@@ -52,6 +53,7 @@ def test_heston_mc_vs_quantlib_parametrized(kappa, theta, eta, rho, v0, K, T):
     assert prices_close(price, price_ql)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "kappa,theta,eta,rho,v0,K,T",
     [
@@ -74,6 +76,7 @@ def test_heston_mc_vs_heston_analytical__parametrized(kappa, theta, eta, rho, v0
     assert prices_close(price, price_an)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "kappa,theta,eta,rho,v0,K,T",
     [

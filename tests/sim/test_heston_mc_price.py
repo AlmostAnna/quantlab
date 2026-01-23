@@ -5,6 +5,7 @@ This module contains tests to ensure basic correctness of MC pricing
 of calls in Heston model.
 """
 import numpy as np
+import pytest
 
 from quantlab.instruments.base import StockOption
 from quantlab.market_data.market_state import MarketState
@@ -12,6 +13,7 @@ from quantlab.models.heston.model import HestonParameters, HestonProcess
 from quantlab.sim.heston.mc_pricer import heston_euler_mc_price
 
 
+@pytest.mark.slow
 def test_heston_exact_mc_price_positive():
     """Test call price range."""
     market_state = MarketState(stock_price=100.0, interest_rate=0.0, time=0.0)
@@ -25,6 +27,7 @@ def test_heston_exact_mc_price_positive():
     assert price < 100.0  # can't be worth more than underlying
 
 
+@pytest.mark.slow
 def test_heston_exact_mc_price_atm_convergence():
     """Test ATM call price convergence to max(S-K,0) for a very short maturity."""
     # As T gets very small (but not too small for numerical stability),
