@@ -9,9 +9,8 @@ A personal research repository exploring **quantitative finance**, **model risk*
 ## What’s Inside
 
 This repo contains:
-- **Classical models**: Black-Scholes, Heston, local volatility
-- **Exotic derivatives**: Autocallables, Asian options, structured notes
-- **Hedging analysis**: Error decomposition, stop-loss replication, discrete trading
+- **Classical models**: Black-Scholes, Heston
+- **Hedging analysis**: Error decomposition, discrete trading
 - **Machine learning**: Buehler-style deep hedging with transaction costs
 - **Stress testing**: Sensitivity to volatility misspecification, rebalancing frequency
 
@@ -23,11 +22,13 @@ All code is organized to support **reuse**, **clarity**, and **diagnostics**—n
 ```
 quantlab/ 
 ├── notebooks/  
-│ ├── models/ # Stochastic volatility, Dupire, etc. 
+│ ├── models/ # Stochastic volatility, etc. 
 │ ├── model_risk/ # Hedging errors, replication failure, Greeks 
 │ └── ml/ # Deep hedging, training diagnostics 
 ├── src/ # Reusable quant primitives (installable as 'quantlab')
 |   ├── quantlab/
+│      ├── calibration/ 
+|      ├── data/ # Synthetic data generation
 │      ├── hedging/ # Greeks, naive strategies
 |      ├── instruments/ 
 │      ├── market_data/ 
@@ -60,7 +61,7 @@ quantlab/
 - Model risk matters: Every assumption is surfaced and tested.
 - ML as a tool, not a black box: Diagnostics, baselines, and stress tests are first-class citizens.
 
-© 2025 AlmostAnna — For learning, reflection, and professional growth.
+© 2025 - 2026 AlmostAnna — For learning, reflection, and professional growth.
 
 
 
