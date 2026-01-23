@@ -15,6 +15,7 @@ dependencies:
   - nodejs  # Required to activate widget extensions
   - pandas
   - openpyxl
+  - jupyter-book
   - pip:
     - nest-asyncio  # Helps fix event loop issues in Jupyter
     - torch
