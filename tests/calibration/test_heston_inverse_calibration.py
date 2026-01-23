@@ -74,7 +74,7 @@ def test_recover_heston_params_cos():
         bounds=bounds,
         method="differential_evolution",
         optimizer_options={"maxiter": 1000, "seed": 42, "polish": True, "disp": True},
-        verbose=True,
+        verbose=False,
     )
 
     # 5. Assertions
