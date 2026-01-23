@@ -63,6 +63,20 @@ def recover_heston_params_from_prices(
     Returns:
     - Dict of recovered parameters.
     """
+    # --- 1. Validate input arrays have same length ---
+    assert (
+        len(strikes) == len(maturities) == len(prices) == len(discount_factors)
+    ), f"Array lengths don't match: {len(strikes)}, {len(maturities)}, {len(prices)}, {len(discount_factors)}"  # noqa: E501
+
+    # Handle forward as scalar or array properly
+    if np.isscalar(forward):
+        forward_array = np.full_like(strikes, forward)
+    else:
+        forward_array = forward
+        assert len(forward_array) == len(
+            strikes
+        ), f"Forward array length mismatch: {len(forward_array)} vs {len(strikes)}"
+
     # --- 1. Convert observed prices to implied vols  ---
     undiscounted_prices = prices / discount_factors
     intrinsic = np.maximum(forward - strikes, 0.0)
@@ -87,7 +101,8 @@ def recover_heston_params_from_prices(
         model_ivs = []
         for i in range(len(strikes)):
             try:
-                S_val = forward if np.isscalar(forward) else forward[i]
+                # S_val = forward if np.isscalar(forward) else forward[i]
+                S_val = forward_array[i]  # Use the corrected forward array
                 K_val = strikes[i]
                 T_val = maturities[i]
 
@@ -172,10 +187,49 @@ def recover_heston_params_from_prices(
 
     # --- 5. Check success and return ---
     if not result.success:
-        print(f"Optimization failed: {result.message}")
-        return initial_guess
+        print(f"Optimization status: {result.message}")
+        # Check if we got a reasonably good solution
+        # despite not meeting convergence criteria
+        if result.fun < 1e-3:  # If MSE is still reasonably small
+            print(f"Accepting suboptimal solution with MSE={result.fun:.6f}")
+            recovered_params = {
+                name: val for name, val in zip(list(initial_guess.keys()), result.x)
+            }
+            return recovered_params
+        else:
+            # Check for common termination reasons that aren't true failures
+            msg_lower = str(result.message).lower() if result.message else ""
 
-    recovered_params = {
-        name: val for name, val in zip(list(initial_guess.keys()), result.x)
-    }
-    return recovered_params
+            # Common DE messages about iteration limits
+            de_limits = any(
+                word in msg_lower
+                for word in ["iteration", "maxiter", "max evaluations"]
+            )
+            # Common minimize messages about iteration/function eval limits
+            min_limits = any(
+                word in msg_lower
+                for word in ["iterations", "maxfev", "maxiter", "function evaluation"]
+            )
+            # Convergence tolerance reached (but not perfect)
+            tolerance_reached = any(
+                word in msg_lower for word in ["ftol", "xtol", "gtol", "converged"]
+            )
+
+            if de_limits or min_limits or tolerance_reached:
+                print(
+                    f"Optimization terminated (likely reached limits), returning best result (MSE={result.fun:.6f})"  # noqa: E501
+                )
+                recovered_params = {
+                    name: val for name, val in zip(list(initial_guess.keys()), result.x)
+                }
+                return recovered_params
+            else:
+                # Genuine failure (constraints violated, numerical issues, etc.)
+                print("Returning initial guess due to optimization failure.")
+                return initial_guess
+    else:
+        # Success - converged properly
+        recovered_params = {
+            name: val for name, val in zip(list(initial_guess.keys()), result.x)
+        }
+        return recovered_params

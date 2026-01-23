@@ -8,72 +8,70 @@ import pytest
 
 from quantlab.calibration.inverse import recover_heston_params_from_prices
 from quantlab.calibration.utils import make_heston_object_wrapper
-from quantlab.instruments.base import StockOption
+from quantlab.data.synthetic import generate_heston_vol_surface
 from quantlab.market_data.market_state import MarketState
-from quantlab.models.heston.model import HestonParameters, HestonProcess
-from quantlab.pricing.heston.cos import price as cos_price_function
+from quantlab.models.heston.model import HestonParameters
+from quantlab.pricing.heston.cos import price as cos_price
 
 
 @pytest.mark.slow
 def test_recover_heston_params_cos():
     """Test the inverse calibration pipeline using COS pricer."""
-    # 1. Define True Parameters
-    true_params = HestonParameters(v0=0.04, kappa=2.0, theta=0.04, eta=0.3, rho=-0.7)
-    S0, r, t = 100.0, 0.05, 0.0
-    market_state = MarketState(stock_price=S0, interest_rate=r, time=t)
+    # 1. Generate synthetic *prices* using known true params
+    true_params_input = {
+        "v0": 0.04,
+        "kappa": 2.0,
+        "theta": 0.04,
+        "eta": 0.3,
+        "rho": -0.7,
+    }
+    true_params = HestonParameters(**true_params_input)
+    market_state_input = {"stock_price": 100.0, "interest_rate": 0.05, "time": 0.0}
+    strikes_grid = np.linspace(80, 120, 5)  # Few points for a quick test
+    maturities_grid = np.array([0.5, 1.0, 1.5])
 
-    # 2. Generate Synthetic Prices
-    strikes = np.linspace(80, 120, 5)  # Few points for a quick test
-    maturities = np.array([0.5, 1.0, 1.5])
-    # Use meshgrid or nested loops to get all (K, T) pairs
-    K_mesh, T_mesh = np.meshgrid(strikes, maturities)
-    K_flat, T_flat = K_mesh.flatten(), T_mesh.flatten()
+    strikes_syn, maturities_syn, prices_synthetic = generate_heston_vol_surface(
+        market_state=MarketState(**market_state_input),
+        heston_params=HestonParameters(**true_params_input),
+        strikes=strikes_grid,
+        maturities=maturities_grid,  # Absolute maturities
+        output_format="prices",
+        pricing_method="cos",
+    )
 
-    prices_synthetic = []
-    heston_process_fixed = HestonProcess(
-        true_params, market_state
-    )  # Process with true params
-    for K, T in zip(K_flat, T_flat):
-        option = StockOption(strike_price=K, expiration_time=T, is_call=True)
-        # Price using the true process
-        price = cos_price_function(
-            option, heston_process_fixed, n_points=512
-        )  # Use sufficient points for accuracy
-        prices_synthetic.append(float(price))
-    prices_synthetic = np.array(prices_synthetic)
+    # 2. Calculate corresponding forwards and discount factors for the inverse function
+    S0, r = market_state_input["stock_price"], market_state_input["interest_rate"]
+    discount_factors_synthetic = np.exp(-r * maturities_syn)
+    forwards_synthetic = S0 * np.exp(r * maturities_syn)
 
     # 3. Set up calibration
-    forward = S0 * np.exp(r * T_flat)
-    discount_factors = np.exp(-r * T_flat)
-
-    initial_guess = {"v0": 0.05, "kappa": 1.5, "theta": 0.05, "eta": 0.25, "rho": -0.5}
+    initial_guess = {"v0": 0.02, "kappa": 1.5, "theta": 0.1, "eta": 0.2, "rho": -0.4}
     bounds = {
-        "v0": (0.01, 0.2),
-        "kappa": (0.1, 10.0),
-        "theta": (0.01, 0.2),
-        "eta": (0.01, 1.0),
-        "rho": (-0.99, 0.99),
+        "v0": (1e-4, 1.0),
+        "kappa": (0.1, 20.0),
+        "theta": (1e-4, 1.0),
+        "eta": (0.01, 2.0),
+        "rho": (-0.999, 0.999),
     }
-
     # 4. Create Wrapper and Recover
     cos_wrapper = make_heston_object_wrapper(
-        pricer_func=cos_price_function,
-        market_state_for_calibration=market_state,  # Same market state as generation
-        pricer_kwargs={"n_points": 512},  # Use same settings as generation for fairness
+        pricer_func=cos_price,
+        market_state_for_calibration=MarketState(**market_state_input),
+        pricer_kwargs={"n_points": 4096},  # Use same settings as generation
     )
 
     recovered_params = recover_heston_params_from_prices(
-        strikes=K_flat,
-        maturities=T_flat,
+        strikes=strikes_syn,
+        maturities=maturities_syn,
         prices=prices_synthetic,
-        forward=forward,
-        discount_factors=discount_factors,
+        forward=forwards_synthetic,
+        discount_factors=discount_factors_synthetic,
         initial_guess=initial_guess,
         pricing_func=cos_wrapper,
         pricing_kwargs={},
         bounds=bounds,
         method="differential_evolution",
-        optimizer_options={"maxiter": 1000, "seed": 42, "polish": True, "disp": True},
+        optimizer_options={"maxiter": 200, "seed": 42, "polish": True, "disp": True},
         verbose=False,
     )
 

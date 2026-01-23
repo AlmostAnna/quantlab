@@ -27,6 +27,7 @@ def generate_heston_vol_surface(
     noise_level: float = 0.005,  # ±0.5% vol
     seed: int = None,
     pricing_method: str = "closed_form",
+    output_format: str = "implied_vols",
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Generate a synthetic implied volatility surface from the Heston model.
@@ -51,7 +52,8 @@ def generate_heston_vol_surface(
         Random seed for noise.
     pricing_method : str
         'closed_form' for semi-analytic, 'cos' for COS method.
-
+    output_format : str
+        'implied_vols' (default) or 'prices'.
     Returns
     -------
     strikes_flat : np.ndarray
@@ -59,7 +61,8 @@ def generate_heston_vol_surface(
     maturities_flat : np.ndarray
         1D array of maturities (T - t).
     implied_vols_flat : np.ndarray
-        1D array of implied vols.
+        1D array of implied vols or market/discounted prices,
+        depending on output_format.
     """
     if market_state is None:
         market_state = MarketState(stock_price=100.0, interest_rate=0.0, time=0.0)
@@ -106,34 +109,47 @@ def generate_heston_vol_surface(
 
     prices_flat = np.array(prices_flat)
 
-    # --- Convert Prices to IV using py_vollib ---
-    # 1. Calculate forward prices and discount factors
-    forward_prices = market_state.stock_price * np.exp(
-        market_state.interest_rate * times_to_expiry_flat
-    )
-    discount_factors = np.exp(-market_state.interest_rate * times_to_expiry_flat)
+    # --- Decide Output Based on Format ---
+    if output_format == "prices":
+        # Return the ACTUAL MARKET/DISCOUNTED prices
+        output_flat = prices_flat
+        # Noise cannot be meaningfully added to prices in the same way as vols
+        # unless specified differently. For now, ignore add_noise for 'prices'.
+        if add_noise:
+            print("Warning: add_noise is ignored when output_format='prices'.")
+    elif output_format == "implied_vols":
+        # --- Convert Prices to IV using py_vollib ---
+        # 1. Calculate forward prices and discount factors
+        forward_prices = market_state.stock_price * np.exp(
+            market_state.interest_rate * times_to_expiry_flat
+        )
+        discount_factors = np.exp(-market_state.interest_rate * times_to_expiry_flat)
 
-    # 2. Convert discounted prices to undiscounted prices
-    undiscounted_prices = prices_flat / discount_factors
+        # 2. Convert discounted prices to undiscounted prices
+        undiscounted_prices = prices_flat / discount_factors
 
-    # 3. Use py_vollib to get IV
-    # py_vollib expects (undiscounted_price, forward, strike, time, flag)
-    iv_flat = implied_volatility_vec(
-        undiscounted_prices,
-        forward_prices,
-        strikes_flat,
-        times_to_expiry_flat,  # T - t
-        "c",  # call
-    )
+        # 3. Use py_vollib to get IV
+        iv_flat = implied_volatility_vec(
+            undiscounted_prices,
+            forward_prices,
+            strikes_flat,
+            times_to_expiry_flat,  # T - t
+            "c",  # call
+        )
 
-    # Apply noise if requested
-    if add_noise:
-        noise = np.random.normal(0, noise_level, size=iv_flat.shape)
-        iv_flat = np.clip(iv_flat + noise, 0.01, 2.0)
+        # Apply noise if requested
+        if add_noise:
+            noise = np.random.normal(0, noise_level, size=iv_flat.shape)
+            iv_flat = np.clip(iv_flat + noise, 0.01, 2.0)
+        output_flat = iv_flat
+    else:
+        raise ValueError(
+            f"Unknown output_format: {output_format}. Must be 'implied_vols' or 'prices'."  # noqa: E501
+        )
 
     # Return flattened arrays
     # Note: We return times_to_expiry_flat, which is T - t
-    return strikes_flat, times_to_expiry_flat, iv_flat
+    return strikes_flat, times_to_expiry_flat, output_flat
 
 
 def generate_heston_bid_ask_spreads(
