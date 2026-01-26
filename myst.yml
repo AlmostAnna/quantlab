@@ -13,7 +13,7 @@ project:
     #- title: Notebooks
     #  children:
     - file: notebooks/COS_Method_Fourier_Pricing.ipynb
-    #- file: notebooks/Heston_Model_Calibration_Pricing_Hedging.ipynb
+    - file: notebooks/Heston_Model_Calibration_Pricing_Hedging.ipynb
 
 site:
   template: book-theme

@@ -60,7 +60,7 @@ jobs:
           conda activate quantlab
           # Execute notebooks to populate outputs for MyST rendering
           # Only execute notebooks that need outputs
-          jupyter nbconvert --execute --to notebook notebooks/Heston_Model_Calibration_Pricing_Hedging.ipynb || echo "Heston notebook not found or not executed"
+          jupyter nbconvert --execute --inplace --to notebook notebooks/Heston_Model_Calibration_Pricing_Hedging.ipynb || echo "Heston notebook not found or not executed"
 
       - name: Build HTML Assets
         shell: bash -l {0}
