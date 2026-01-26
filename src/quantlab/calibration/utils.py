@@ -1,13 +1,48 @@
 """
 Model calibration helper module.
 
-This module contains convinience wrappers for calibration routines.
+This module contains helper functions for calibration pipelines.
 """
 from typing import Any, Callable, Dict
+
+import numpy as np
+from py_vollib.black.greeks.analytical import vega as bs_vega
 
 from quantlab.instruments.base import StockOption
 from quantlab.market_data.market_state import MarketState
 from quantlab.models.heston.model import HestonParameters, HestonProcess
+
+
+def calculate_vega_weights(
+    strikes: np.ndarray,
+    maturities: np.ndarray,
+    implied_vols: np.ndarray,
+    forwards: np.ndarray,
+    interest_rates: np.ndarray,
+    min_weight: float = 1e-6,
+) -> np.ndarray:
+    """
+    Calculate Black-Scholes vega weights for options in a volatility surface.
+
+    Args:
+        strikes: Array of strike prices
+        maturities: Array of times to maturity
+        implied_vols: Array of implied volatilities
+        forwards: Array of forward prices
+        interest_rates: Array of interest rates (for each maturity)
+        min_weight: Minimum weight to avoid numerical issues
+
+    Returns:
+        Array of vega weights
+    """
+    vega_weights = []
+    for F, K, T, iv, r in zip(
+        forwards, strikes, maturities, implied_vols, interest_rates
+    ):
+        weight = bs_vega("c", F, K, T, r, iv)
+        vega_weights.append(max(weight, min_weight))
+
+    return np.array(vega_weights)
 
 
 def make_heston_object_wrapper(

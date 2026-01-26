@@ -27,6 +27,7 @@ def recover_heston_params_from_prices(
     bounds: Dict[
         str, Tuple[float, float]
     ],  # Bounds are crucial for global optimizers like DE
+    weights: np.ndarray = None,  # Optional weights
     method: Union[str, Callable] = "L-BFGS-B",  # Allow string name or direct function
     optimizer_options: Dict[
         str, Any
@@ -49,6 +50,11 @@ def recover_heston_params_from_prices(
     - bounds: Dict of (lower, upper) bounds for each parameter
             (required for differential_evolution),e.g.,
             {'kappa': (0.1, 10.0), 'theta': (0.01, 0.2), ...}
+    - weights: Optional (N,) array to weight the objective function.
+                If provided, objective becomes:
+                sum(weights * (model_iv - target_iv)^2) / sum(weights).
+                Useful for vega-weighted calibration or emphasizing liquid options.
+                Default: None (uniform weights).
     - method: Name of the scipy optimizer ('L-BFGS-B', 'differential_evolution')
             or the optimizer function itself.
             'L-BFGS-B' is fast but local. 'differential_evolution' is slower but global.
@@ -144,10 +150,13 @@ def recover_heston_params_from_prices(
 
         model_ivs = np.array(model_ivs)
         error = observed_ivs - model_ivs
-        mse = np.mean(error**2)
-        if verbose and _debug_counter <= 5:
-            print(f"  DEBUG: Calculated MSE = {mse:.8f}\n")
-        return mse
+
+        if weights is not None:
+            weighted_mse = np.average(error**2, weights=weights)
+            return weighted_mse
+        else:
+            mse = np.mean(error**2)
+            return mse
 
     # --- 3. Set up optimizer ---
     x0 = list(initial_guess.values())  # Initial guess vector for local optimizers
