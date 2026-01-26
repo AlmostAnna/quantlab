@@ -54,12 +54,6 @@ jobs:
           conda activate quantlab
           conda info --envs
 
-      - name: Install Jupyter Book (via myst)
-        shell: bash -l {0}
-        run: |
-          conda activate quantlab
-          npm install -g jupyter-book
-
       - name: Execute notebooks to generate outputs for MyST
         shell: bash -l {0}
         run: |
