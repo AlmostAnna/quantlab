@@ -6,7 +6,11 @@ This module contains helper functions for calibration pipelines.
 from typing import Any, Callable, Dict
 
 import numpy as np
+from py_vollib.black import black
 from py_vollib.black.greeks.analytical import vega as bs_vega
+from py_vollib.black.implied_volatility import (
+    implied_volatility_of_undiscounted_option_price,
+)
 
 from quantlab.instruments.base import StockOption
 from quantlab.market_data.market_state import MarketState
@@ -96,3 +100,43 @@ def make_heston_object_wrapper(
             raise  # Re-raise to trigger error handling in the objective function
 
     return wrapper
+
+
+def safe_implied_volatility_of_undiscounted_price(
+    undiscounted_price, F, K, T, flag, min_iv=1e-6, max_iv=5.0, tolerance=1e-8
+):
+    """Safely calculate implied volatility with fallbacks."""
+    try:
+        # Try the normal calculation
+        iv = implied_volatility_of_undiscounted_option_price(
+            undiscounted_price, F, K, T, flag
+        )
+        # Check if result is reasonable
+        if np.isnan(iv) or iv < min_iv or iv > max_iv:
+            raise ValueError(f"Invalid IV: {iv}")
+        return iv
+    except (ValueError, TypeError, RuntimeError, OverflowError):
+        # Fallback: use a simple bisection search
+        try:
+            # Calculate intrinsic value
+            intrinsic = max(0, F - K) if flag == "c" else max(0, K - F)
+
+            # If price is too close to intrinsic, return minimum vol
+            if abs(undiscounted_price - intrinsic) < tolerance:
+                return min_iv
+
+            # Bisection search for IV
+            low, high = min_iv, max_iv
+            for _ in range(50):  # Max iterations
+                mid = (low + high) / 2
+                price_at_mid = black(flag, F, K, T, mid, 0.0)  # r=q=0 for undiscounted
+                if abs(price_at_mid - undiscounted_price) < tolerance:
+                    return mid
+                elif price_at_mid < undiscounted_price:
+                    low = mid
+                else:
+                    high = mid
+            return (low + high) / 2
+        except (ValueError, TypeError, RuntimeError, OverflowError, ZeroDivisionError):
+            # Ultimate fallback
+            return min_iv  # Return minimum volatility
