@@ -30,19 +30,55 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Setup Pages
         uses: actions/configure-pages@v3
+
       - uses: actions/setup-node@v4
         with:
           node-version: 18.x
+
+      - name: Setup Conda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          python-version: '3.10'
+          mamba-version: "*"
+          channels: conda-forge,defaults
+          channel-priority: true
+          activate-environment: quantlab
+
+      - name: Install Dependencies from environment.yml
+        shell: bash -l {0}
+        run: |
+          conda env update --file environment.yml --prune
+          conda activate quantlab
+          conda info --envs
+
       - name: Install Jupyter Book (via myst)
-        run: npm install -g jupyter-book
+        shell: bash -l {0}
+        run: |
+          conda activate quantlab
+          npm install -g jupyter-book
+
+      - name: Execute notebooks to generate outputs for MyST
+        shell: bash -l {0}
+        run: |
+          conda activate quantlab
+          # Execute notebooks to populate outputs for MyST rendering
+          # Only execute notebooks that need outputs
+          jupyter nbconvert --execute --to notebook notebooks/Heston_Model_Calibration_Pricing_Hedging.ipynb || echo "Heston notebook not found or not executed"
+
       - name: Build HTML Assets
-        run: jupyter-book build --html
+        shell: bash -l {0}
+        run: |
+          conda activate quantlab
+          jupyter-book build --html
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: './_build/html'
+
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
