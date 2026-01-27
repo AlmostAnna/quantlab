@@ -5,6 +5,7 @@ This module contains functions for simulating delta hedging strategies
 under various models.
 """
 import numpy as np
+import py_vollib.black_scholes.greeks.analytical as bs_greeks
 from scipy.interpolate import RegularGridInterpolator
 
 from quantlab.hedging.greeks import heston_delta_bump_revalue
@@ -79,6 +80,7 @@ def simulate_heston_hedging_path(
     delta_interpolator: RegularGridInterpolator,
     n_steps: int,
     seed: int = 42,
+    min_time: float = 1e-8,
 ) -> tuple[float, list[float], list[float], list[float]]:
     """
     Simulate a single hedging path under Heston model.
@@ -90,6 +92,7 @@ def simulate_heston_hedging_path(
         delta_interpolator: Pre-computed delta interpolator
         n_steps: Number of rebalancing steps
         seed: Random seed
+        min_time: floor to avoid division by zero
 
     Returns:
         (hedging_pnl, stock_path, variance_path, delta_path)
@@ -139,7 +142,7 @@ def simulate_heston_hedging_path(
 
     for step in range(n_steps):
         t_step = (step + 1) * dt
-        tau = T - t_step  # Time to maturity decreases
+        tau = max(T - t_step, min_time)  # Time to maturity decreases
 
         # Generate correlated normals
         Z1 = np.random.randn()
@@ -216,6 +219,187 @@ def simulate_multiple_hedging_paths(
             process=process,
             initial_price=initial_price,
             delta_interpolator=delta_interpolator,
+            n_steps=n_steps,
+            seed=seed_start + i,
+        )
+        pnl_list.append(pnl)
+
+    return np.array(pnl_list)
+
+
+def bs_delta_provider(
+    option: StockOption, market_state: MarketState, iv: float, min_time: float = 1e-8
+) -> float:
+    """
+    Black-Scholes delta for given IV.
+
+    Args:
+        option: Option to hedge
+        market_state: State of the market
+        iv: Implied volatility
+        min_time: floor to avoid division by zero
+
+    Returns:
+        BS Delta
+    """
+    time_to_expiry = max(option.expiration_time - market_state.time, min_time)
+    return bs_greeks.delta(
+        "c" if option.is_call else "p",
+        market_state.stock_price,
+        option.strike_price,
+        time_to_expiry,
+        market_state.interest_rate,
+        iv,
+    )
+
+
+def simulate_heston_hedging_path_with_bs_delta(
+    option: StockOption,
+    process: HestonProcess,
+    initial_price: float,
+    bs_iv: float,
+    n_steps: int,
+    seed: int = 42,
+    min_time: float = 1e-8,
+) -> tuple[float, list[float], list[float], list[float]]:
+    """
+    Simulate a single hedging path under Heston model.
+
+    Args:
+        option: Option to hedge
+        process: Heston process parameters
+        initial_price: Initial stock price
+        bs_iv: BS IV
+        n_steps: Number of rebalancing steps
+        seed: Random seed
+        min_time: floor to avoid division by zero
+
+    Returns:
+        (hedging_pnl, stock_path, variance_path, delta_path)
+    """
+    np.random.seed(seed)
+
+    # Extract parameters
+    T = option.expiration_time
+    r = process.market_state.interest_rate
+    params = process.model_params
+    kappa, theta, eta, rho, v0 = (
+        params.kappa,
+        params.theta,
+        params.eta,
+        params.rho,
+        params.v0,
+    )
+
+    dt = T / n_steps
+
+    # Initialize
+    S = initial_price
+    v = v0
+    portfolio_value = 0.0  # cash account value
+
+    # Create temporary process with current stock price for initial pricing
+    initial_market_state = MarketState(
+        stock_price=S,
+        interest_rate=process.market_state.interest_rate,
+        time=process.market_state.time,
+    )
+    initial_process = HestonProcess(process.model_params, initial_market_state)
+
+    # Calculate initial option price
+    initial_option_price = cos_price(option, initial_process)
+
+    # Get initial delta
+    # tau = T  # Initial time to maturity
+    initial_delta = bs_delta_provider(option, initial_market_state, bs_iv)
+
+    # Initial hedging: sell option, buy BS delta shares
+    portfolio_value = initial_option_price - initial_delta * S
+
+    stock_path = [initial_price]
+    variance_path = [v0]
+    delta_path = [initial_delta]
+
+    for step in range(n_steps):
+        t_step = (step + 1) * dt
+        # tau = T - t_step  # Time to maturity decreases
+
+        # Generate correlated normals
+        Z1 = np.random.randn()
+        Z2 = np.random.randn()
+        Z_v = rho * Z1 + np.sqrt(1 - rho**2) * Z2  # Correlated normal for variance
+
+        # Stock price step (Log-Euler)
+        S_new = S * np.exp((r - 0.5 * v) * dt + np.sqrt(v * dt) * Z_v)
+
+        # Variance step (Euler, similar to heston_euler_mc_price)
+        dv = kappa * (theta - v) * dt + eta * np.sqrt(max(v, 0.0)) * np.sqrt(dt) * Z2
+        v_new = v + dv
+        v_new = max(v_new, 0.0)  # Ensure non-negative variance
+
+        # Get new BS delta for the next period (after price moves to S_new)
+        temp_market_state = MarketState(stock_price=S_new, interest_rate=r, time=t_step)
+        delta_new = bs_delta_provider(option, temp_market_state, bs_iv)
+
+        # Rebalance: adjust delta position
+        d_delta = delta_new - initial_delta
+        portfolio_value -= d_delta * S_new  # cost of buying/selling shares
+        initial_delta = delta_new
+
+        # Add the new delta to the path (for the next time period)
+        delta_path.append(initial_delta)
+
+        # Update paths
+        stock_path.append(S_new)
+        variance_path.append(v_new)
+
+        S, v = S_new, v_new
+
+    # Final payoff
+    final_payoff = option.payoff(S)
+
+    # Final hedge value: liquidate final delta position
+    final_hedge_value = initial_delta * S
+    final_portfolio = portfolio_value + final_hedge_value
+
+    # Hedging P&L calculation
+    hedging_pnl = initial_option_price - (final_payoff - final_portfolio)
+
+    return hedging_pnl, stock_path, variance_path, delta_path
+
+
+def simulate_multiple_hedging_paths_with_bs_delta(
+    option: StockOption,
+    process: HestonProcess,
+    initial_price: float,
+    bs_iv: float,
+    n_paths: int,
+    n_steps: int,
+    seed_start: int = 2000,
+) -> np.ndarray:
+    """
+    Simulate multiple hedging paths with BS delta and return P&L distribution.
+
+    Args:
+        option: Option to hedge
+        process: Heston process parameters
+        initial_price: Initial stock price
+        bs_iv: BS IV
+        n_paths: Number of simulation paths
+        n_steps: Number of rebalancing steps per path
+        seed_start: Starting seed (will increment for each path)
+
+    Returns:
+        Array of hedging P&Ls for each path
+    """
+    pnl_list = []
+
+    for i in range(n_paths):
+        pnl, _, _, _ = simulate_heston_hedging_path_with_bs_delta(
+            option=option,
+            process=process,
+            initial_price=initial_price,
+            bs_iv=bs_iv,
             n_steps=n_steps,
             seed=seed_start + i,
         )
