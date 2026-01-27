@@ -66,6 +66,7 @@ def prices_close(a, b, abs_tol=1e-4, rel_tol=1e-3):
     return abs(a - b) <= max(abs_tol, rel_tol * max(abs(a), abs(b)))
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize(
     "kappa,theta,eta,rho,v0,K,T",
     [
