@@ -7,9 +7,9 @@ This module contains implementation of HedgeNet evaluation pipeline.
 import torch
 
 from ml.config import GBMConfig, HedgingConfig, StressTestConfig
-from ml.metrics.pnl import compute_pnl_with_tx
-from ml.models.hedge_net import HedgeNet
-from ml.sim.gbm import simulate_gbm
+from quantlab.ml.metrics.pnl import compute_pnl_with_tx
+from quantlab.ml.models.hedge_net import HedgeNet
+from quantlab.sim.gbm import simulate_gbm_torch as simulate_gbm
 
 
 def load_model(hidden_dim, path="artifacts/hedge_net_tx.pth", device="cpu"):
