@@ -45,6 +45,7 @@ addopts = """
     --tb=short
     --doctest-modules
     --cov=src/quantlab
+    --cov=ml
     --cov-report=term-missing
     --cov-report=html
 """
@@ -54,6 +55,11 @@ markers = [
     "ml: Machine learning-specific tests",
     "slow: Tests that take >1s (skip by default)",
 ]
+
+[tool.coverage.run]
+source = ["src", "ml"]
+omit = ["tests/*", "*/__pycache__/*", "*.pyc"]
+disable_warnings = ["no-data-collected", "module-not-imported"]
 
 [tool.black]
 line-length = 88
