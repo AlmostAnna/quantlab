@@ -27,6 +27,7 @@ dependencies:
     - pytest
     - pytest-cov
     - pre-commit
+    - yfinance
     - -e .          # install quantlab package in editable mode
 
 #  - tqdm

@@ -16,6 +16,7 @@ dependencies = [
     "torch",
     "matplotlib",
     "py_vollib",
+    "yfinance",
 ]
 
 [project.optional-dependencies]
