@@ -58,10 +58,10 @@ def make_heston_object_wrapper(
     Create a wrapper compatible with generic calibration routines.
 
     This wrapper constructs the necessary MarketState, HestonProcess, and StockOption
-    objects for your object-oriented pricer.
+    objects for the object-oriented pricer.
 
     Args:
-        pricer_func: The specific pricer function (e.g., cos_price, mc_price).
+        pricer_func: The specific pricer function.
                      Signature should be
                      (option: StockOption, process: HestonProcess, **kwargs) -> price
         market_state_for_calibration: The MarketState object representing the snapshot
@@ -107,19 +107,35 @@ def safe_implied_volatility_of_undiscounted_price(
 ):
     """Safely calculate implied volatility with fallbacks."""
     try:
-        # Try the normal calculation
+        # Handle edge case: time to maturity is effectively zero
+        if T <= tolerance:
+            # When T is zero, we can't calculate implied volatility meaningfully
+            # Use a reasonable fallback based on moneyness
+            if flag == "c":
+                intrinsic = max(0, F - K)
+            else:  # flag == "p"
+                intrinsic = max(0, K - F)
+
+            if undiscounted_price <= intrinsic + tolerance:
+                # Price is at or below intrinsic value
+                return min_iv
+            else:
+                # Price exceeds intrinsic, assign minimum vol
+                return min_iv
+
         iv = implied_volatility_of_undiscounted_option_price(
             undiscounted_price, F, K, T, flag
         )
-        # Check if result is reasonable
         if np.isnan(iv) or iv < min_iv or iv > max_iv:
             raise ValueError(f"Invalid IV: {iv}")
         return iv
-    except (ValueError, TypeError, RuntimeError, OverflowError):
-        # Fallback: use a simple bisection search
+    except (ValueError, TypeError, RuntimeError, OverflowError, ZeroDivisionError):
         try:
             # Calculate intrinsic value
-            intrinsic = max(0, F - K) if flag == "c" else max(0, K - F)
+            if flag == "c":
+                intrinsic = max(0, F - K)
+            else:  # flag == "p"
+                intrinsic = max(0, K - F)
 
             # If price is too close to intrinsic, return minimum vol
             if abs(undiscounted_price - intrinsic) < tolerance:
@@ -129,7 +145,17 @@ def safe_implied_volatility_of_undiscounted_price(
             low, high = min_iv, max_iv
             for _ in range(50):  # Max iterations
                 mid = (low + high) / 2
-                price_at_mid = black(flag, F, K, T, mid, 0.0)  # r=q=0 for undiscounted
+                # Use Black model for bisection
+                try:
+                    price_at_mid = black(
+                        flag, F, K, T, mid, 0.0
+                    )  # r=q=0 for undiscounted
+                except ZeroDivisionError:
+                    # If Black model fails with T=0, use minimum vol
+                    if T <= tolerance:
+                        return min_iv
+                    raise
+
                 if abs(price_at_mid - undiscounted_price) < tolerance:
                     return mid
                 elif price_at_mid < undiscounted_price:
@@ -138,5 +164,4 @@ def safe_implied_volatility_of_undiscounted_price(
                     high = mid
             return (low + high) / 2
         except (ValueError, TypeError, RuntimeError, OverflowError, ZeroDivisionError):
-            # Ultimate fallback
-            return min_iv  # Return minimum volatility
+            return min_iv
