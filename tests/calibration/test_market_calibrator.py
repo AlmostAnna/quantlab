@@ -1,5 +1,6 @@
 """Tests for market calibrator module."""
 
+import tempfile
 from unittest.mock import Mock, patch
 
 import numpy as np
@@ -126,29 +127,97 @@ def test_calibrate_from_equity_prices_with_low_volatility():
 
 def test_calibrate_to_market_data_fallback():
     """Test market calibration falls back to equity when option data unavailable."""
+    # Use a temporary directory for caching to avoid pickling issues
+    with tempfile.TemporaryDirectory() as temp_dir:
+        calibrator = MarketCalibrator(cache_dir=temp_dir)
+
+        # Mock the option chain method to return None (no option data)
+        with patch.object(calibrator, "_fetch_option_chain") as mock_fetch:
+            mock_fetch.return_value = (
+                None,
+                None,
+                None,
+                150.0,
+            )  # No option data, but S0=150
+
+            # Create a real HestonProcess object instead of a mock
+            real_params = HestonParameters(
+                v0=0.04, kappa=2.0, theta=0.04, eta=0.3, rho=-0.7
+            )
+            real_market_state = MarketState(
+                stock_price=150.0, interest_rate=0.05, time=0.0
+            )
+            real_process = HestonProcess(real_params, real_market_state)
+
+            # Mock the equity-based calibration method to return a real process
+            with patch.object(
+                calibrator, "_calibrate_from_equity_prices"
+            ) as mock_equity_cal:
+                mock_equity_cal.return_value = real_process
+
+                # Call the main method
+                result = calibrator.calibrate_to_market_data(
+                    "TEST", use_options_if_available=True
+                )
+
+                # Verify equity-based calibration was called as fallback
+                mock_equity_cal.assert_called_once_with("TEST", "2y")
+                assert result.model_params.v0 == real_process.model_params.v0
+                assert (
+                    result.market_state.stock_price
+                    == real_process.market_state.stock_price
+                )
+
+
+def test_calibrate_to_market_data_fallback_with_mocked_cache():
+    """Test market calibration falls back to equity when option data unavailable."""
     calibrator = MarketCalibrator()
 
-    # Mock the option chain method to return None (no option data)
-    with patch.object(calibrator, "_fetch_option_chain") as mock_fetch:
-        mock_fetch.return_value = None, None, None, 150.0  # No option data, but S0=150
+    # Mock the caching methods to avoid pickling issues
+    with patch.object(calibrator, "load_cached_calibrated_process") as mock_load_cache:
+        mock_load_cache.return_value = (None, False)  # No cached process
 
-        # Mock the equity-based calibration method to return a mock process
         with patch.object(
-            calibrator, "_calibrate_from_equity_prices"
-        ) as mock_equity_cal:
-            mock_process = Mock(spec=HestonProcess)
-            mock_process.model_params = Mock(spec=HestonParameters)
-            mock_process.market_state = Mock(spec=MarketState)
-            mock_equity_cal.return_value = mock_process
+            calibrator, "save_calibrated_process_to_cache"
+        ) as mock_save_cache:
+            mock_save_cache.return_value = None  # Don't actually save
 
-            # Call the main method
-            result = calibrator.calibrate_to_market_data(
-                "TEST", use_options_if_available=True
-            )
+            # Mock the option chain method to return None (no option data)
+            with patch.object(calibrator, "_fetch_option_chain") as mock_fetch:
+                mock_fetch.return_value = (
+                    None,
+                    None,
+                    None,
+                    150.0,
+                )  # No option data, but S0=150
 
-            # Verify equity-based calibration was called as fallback
-            mock_equity_cal.assert_called_once_with("TEST", "2y")
-            assert result == mock_process
+                # Create a real HestonProcess object instead of a mock
+                real_params = HestonParameters(
+                    v0=0.04, kappa=2.0, theta=0.04, eta=0.3, rho=-0.7
+                )
+                real_market_state = MarketState(
+                    stock_price=150.0, interest_rate=0.05, time=0.0
+                )
+                real_process = HestonProcess(real_params, real_market_state)
+
+                # Mock the equity-based calibration method to return a real process
+                with patch.object(
+                    calibrator, "_calibrate_from_equity_prices"
+                ) as mock_equity_cal:
+                    mock_equity_cal.return_value = real_process
+
+                    # Call the main method
+                    result = calibrator.calibrate_to_market_data(
+                        "TEST", use_options_if_available=True
+                    )
+
+                    # Verify equity-based calibration was called as fallback
+                    mock_equity_cal.assert_called_once_with("TEST", "2y")
+                    assert result.model_params.v0 == real_process.model_params.v0
+                    assert (
+                        result.market_state.stock_price
+                        == real_process.market_state.stock_price
+                    )
 
 
 @pytest.mark.slow
@@ -156,78 +225,263 @@ def test_calibrate_to_market_data_with_options_availability():
     """Test market calibration uses option data when available."""
     # Mock everything to prevent real yfinance calls
     with patch("yfinance.Ticker"), patch("yfinance.download"):
-        calibrator = MarketCalibrator()
+        # Use temporary directory to avoid pickling issues
+        with tempfile.TemporaryDirectory() as temp_dir:
+            calibrator = MarketCalibrator(cache_dir=temp_dir)
 
-        with patch.object(calibrator, "_fetch_option_chain") as mock_fetch:
-            # Return mock option data with at least 6 options to pass len > 5 check
-            mock_strikes = np.array(
-                [145.0, 150.0, 155.0, 160.0, 165.0, 170.0, 175.0]
-            )  # 7 options
-            mock_maturities = np.array([0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75])
-            mock_ivs = np.array([0.22, 0.20, 0.23, 0.21, 0.19, 0.24, 0.22])
-            mock_S0 = 150.0
+            with patch.object(calibrator, "_fetch_option_chain") as mock_fetch:
+                # Return mock option data with at least 6 options to pass len > 5 check
+                mock_strikes = np.array(
+                    [145.0, 150.0, 155.0, 160.0, 165.0, 170.0, 175.0]
+                )  # 7 options
+                mock_maturities = np.array([0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75])
+                mock_ivs = np.array([0.22, 0.20, 0.23, 0.21, 0.19, 0.24, 0.22])
+                mock_S0 = 150.0
 
-            mock_fetch.return_value = mock_strikes, mock_maturities, mock_ivs, mock_S0
+                mock_fetch.return_value = (
+                    mock_strikes,
+                    mock_maturities,
+                    mock_ivs,
+                    mock_S0,
+                )
 
-            # Mock the option-based calibration method to succeed
-            with patch.object(calibrator, "_calibrate_from_options") as mock_option_cal:
                 # Create a real HestonProcess instance to return
-                mock_params = HestonParameters(
+                real_params = HestonParameters(
                     v0=0.04, kappa=2.0, theta=0.04, eta=0.3, rho=-0.7
                 )
-                mock_market_state = MarketState(
+                real_market_state = MarketState(
                     stock_price=150.0, interest_rate=0.05, time=0.0
                 )
-                successful_process = HestonProcess(mock_params, mock_market_state)
+                successful_process = HestonProcess(real_params, real_market_state)
 
-                # Make sure the mock returns our successful result
-                mock_option_cal.return_value = successful_process
+                # Mock the option-based calibration method to return the real process
+                with patch.object(
+                    calibrator, "_calibrate_from_options"
+                ) as mock_option_cal:
+                    mock_option_cal.return_value = successful_process
 
-                # Call the main method
-                result = calibrator.calibrate_to_market_data(
-                    "TEST", use_options_if_available=True
-                )
+                    # Mock the caching methods to avoid JSON serialization issues
+                    with patch.object(
+                        calibrator, "save_calibrated_process_to_cache"
+                    ) as mock_save_cache:
+                        mock_save_cache.return_value = None  # Don't actually save
 
-                # Verify option-based calibration was called exactly once
-                mock_option_cal.assert_called_once_with(
-                    mock_strikes, mock_maturities, mock_ivs, mock_S0
-                )
+                        # Call the main method
+                        result = calibrator.calibrate_to_market_data(
+                            "TEST", use_options_if_available=True
+                        )
 
-                # Verify the result is our expected process (not the fallback)
-                assert result is successful_process
-                assert isinstance(result, HestonProcess)
-                assert result.model_params.v0 == 0.04
+                        # Verify option-based calibration was called exactly once
+                        mock_option_cal.assert_called_once_with(
+                            mock_strikes, mock_maturities, mock_ivs, mock_S0
+                        )
+
+                        # Verify the result is our expected process (not the fallback)
+                        assert (
+                            result.model_params.v0 == successful_process.model_params.v0
+                        )
+                        assert (
+                            result.model_params.kappa
+                            == successful_process.model_params.kappa
+                        )
+                        assert (
+                            result.model_params.theta
+                            == successful_process.model_params.theta
+                        )
+                        assert (
+                            result.model_params.eta
+                            == successful_process.model_params.eta
+                        )
+                        assert (
+                            result.model_params.rho
+                            == successful_process.model_params.rho
+                        )
+                        assert (
+                            result.market_state.stock_price
+                            == successful_process.market_state.stock_price
+                        )
+
+
+def test_cache_functionality():
+    """Test that caching methods work without pickling issues when properly mocked."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        calibrator = MarketCalibrator(cache_dir=temp_dir)
+
+        # Test cache key generation
+        cache_key = calibrator._generate_cache_key("SPY", 1.0, 252, True)
+        assert isinstance(cache_key, str)
+        assert len(cache_key) == 32  # MD5 hash length
+
+        # Test path generation
+        proc_path = calibrator._get_calibrated_process_cache_path(cache_key)
+        paths_path = calibrator._get_paths_cache_path(cache_key, 1000)
+        meta_path = calibrator._get_metadata_path(cache_key)
+
+        assert str(proc_path).endswith(".pkl")
+        assert str(paths_path).endswith(".pt")
+        assert str(meta_path).endswith(".json")
+        # The cache path itself doesn't contain the ticker symbol
+        # - only the cache key does
+        # The actual file name contains the hash of the parameters,
+        # not the symbol itself
+        assert "calibrated_process" in str(proc_path)
+        assert "market_calibrated_paths" in str(paths_path)
+        assert "market_calibrated_metadata" in str(meta_path)
+
+
+def test_cache_methods_with_mocked_io():
+    """Test cache methods with mocked file I/O to avoid actual file operations."""
+    # Mock file operations to avoid actual I/O
+    with patch("builtins.open") as mock_open, patch(
+        "pickle.dump"
+    ) as mock_pickle_dump, patch("json.dump") as mock_json_dump, patch(
+        "pathlib.Path.exists"
+    ) as mock_exists:
+        mock_exists.return_value = False  # No cache exists initially
+        mock_open.return_value.__enter__ = Mock()
+        mock_open.return_value.__exit__ = Mock()
+
+        calibrator = MarketCalibrator()
+
+        # Create a real HestonProcess object
+        real_params = HestonParameters(
+            v0=0.04, kappa=2.0, theta=0.04, eta=0.3, rho=-0.7
+        )
+        real_market_state = MarketState(stock_price=100.0, interest_rate=0.05, time=0.0)
+        real_process = HestonProcess(real_params, real_market_state)
+
+        # Test saving process to cache
+        calibrator.save_calibrated_process_to_cache(real_process, "SPY", 1.0, 252, True)
+
+        # Verify pickle.dump was called
+        assert mock_pickle_dump.called
+        # Verify the first argument to pickle.dump is our real process
+        args, kwargs = mock_pickle_dump.call_args
+        assert isinstance(args[0], HestonProcess)
+        assert args[0].model_params.v0 == real_process.model_params.v0
+
+        # Verify json.dump was called with serializable metadata
+        assert mock_json_dump.called
+        json_args, json_kwargs = mock_json_dump.call_args
+        metadata = json_args[
+            0
+        ]  # First argument to json.dump is the object to serialize
+        # Verify metadata contains expected keys
+        assert "ticker" in metadata
+        assert "maturity" in metadata
+        assert "n_steps" in metadata
+        assert metadata["ticker"] == "SPY"
+
+
+def test_load_cached_process_not_found():
+    """Test loading cached process when cache doesn't exist."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        calibrator = MarketCalibrator(cache_dir=temp_dir)
+
+        # Should return None, False when cache doesn't exist
+        cached_process, is_cached = calibrator.load_cached_calibrated_process(
+            "TEST", 1.0, 252, True
+        )
+
+        assert cached_process is None
+        assert is_cached is False
 
 
 def test_calibrate_to_market_data_force_equity_mode():
     """Test market calibration uses equity only when forced."""
-    calibrator = MarketCalibrator()
+    # Use temporary directory to avoid pickling issues
+    with tempfile.TemporaryDirectory() as temp_dir:
+        calibrator = MarketCalibrator(cache_dir=temp_dir)
 
-    # Even with option data available, should use equity when disabled
-    with patch.object(calibrator, "_fetch_option_chain") as mock_fetch:
-        # Mock that option data is available
-        mock_fetch.return_value = (
-            np.array([100.0]),
-            np.array([0.5]),
-            np.array([0.2]),
-            100.0,
-        )
-
-        # Mock the equity-based calibration method
-        with patch.object(
-            calibrator, "_calibrate_from_equity_prices"
-        ) as mock_equity_cal:
-            mock_process = Mock(spec=HestonProcess)
-            mock_equity_cal.return_value = mock_process
-
-            # Call with option data disabled
-            result = calibrator.calibrate_to_market_data(
-                "TEST", use_options_if_available=False
+        # Even with option data available, should use equity when disabled
+        with patch.object(calibrator, "_fetch_option_chain") as mock_fetch:
+            # Mock that option data is available
+            mock_fetch.return_value = (
+                np.array([100.0]),
+                np.array([0.5]),
+                np.array([0.2]),
+                100.0,
             )
 
-            # Verify equity-based calibration was called
-            mock_equity_cal.assert_called_once_with("TEST", "2y")
-            assert result == mock_process
+            # Create a real HestonProcess object instead of a mock
+            real_params = HestonParameters(
+                v0=0.04, kappa=2.0, theta=0.04, eta=0.3, rho=-0.7
+            )
+            real_market_state = MarketState(
+                stock_price=100.0, interest_rate=0.05, time=0.0
+            )
+            real_process = HestonProcess(real_params, real_market_state)
+
+            # Mock the equity-based calibration method
+            with patch.object(
+                calibrator, "_calibrate_from_equity_prices"
+            ) as mock_equity_cal:
+                mock_equity_cal.return_value = real_process
+
+                # Call with option data disabled
+                result = calibrator.calibrate_to_market_data(
+                    "TEST", use_options_if_available=False
+                )
+
+                # Verify equity-based calibration was called
+                mock_equity_cal.assert_called_once_with("TEST", "2y")
+                assert result.model_params.v0 == real_process.model_params.v0
+                assert (
+                    result.market_state.stock_price
+                    == real_process.market_state.stock_price
+                )
+
+
+def test_calibrate_to_market_data_force_equity_mode_with_mocked_cache():
+    """Test market calibration uses equity only when forced (with mocked cache)."""
+    calibrator = MarketCalibrator()
+
+    # Mock the caching methods to avoid pickling issues
+    with patch.object(calibrator, "load_cached_calibrated_process") as mock_load_cache:
+        mock_load_cache.return_value = (None, False)  # No cached process
+
+        with patch.object(
+            calibrator, "save_calibrated_process_to_cache"
+        ) as mock_save_cache:
+            mock_save_cache.return_value = None  # Don't actually save
+
+            # Even with option data available, should use equity when disabled
+            with patch.object(calibrator, "_fetch_option_chain") as mock_fetch:
+                # Mock that option data is available
+                mock_fetch.return_value = (
+                    np.array([100.0]),
+                    np.array([0.5]),
+                    np.array([0.2]),
+                    100.0,
+                )
+
+                # Create a real HestonProcess object instead of a mock
+                real_params = HestonParameters(
+                    v0=0.04, kappa=2.0, theta=0.04, eta=0.3, rho=-0.7
+                )
+                real_market_state = MarketState(
+                    stock_price=100.0, interest_rate=0.05, time=0.0
+                )
+                real_process = HestonProcess(real_params, real_market_state)
+
+                # Mock the equity-based calibration method
+                with patch.object(
+                    calibrator, "_calibrate_from_equity_prices"
+                ) as mock_equity_cal:
+                    mock_equity_cal.return_value = real_process
+
+                    # Call with option data disabled
+                    result = calibrator.calibrate_to_market_data(
+                        "TEST", use_options_if_available=False
+                    )
+
+                    # Verify equity-based calibration was called
+                    mock_equity_cal.assert_called_once_with("TEST", "2y")
+                    assert result.model_params.v0 == real_process.model_params.v0
+                    assert (
+                        result.market_state.stock_price
+                        == real_process.market_state.stock_price
+                    )
 
 
 def test_print_calibration_results_output(capsys):
@@ -263,7 +517,7 @@ def test_fetch_option_chain_structure():
         mock_ticker_instance = Mock()
 
         # Mock historical data for S0 with proper pandas structure
-        mock_history = pd.DataFrame({"Adj Close": [400.0, 401.0, 399.0, 402.0, 400.5]})
+        mock_history = pd.DataFrame({"Close": [400.0, 401.0, 399.0, 402.0, 400.5]})
 
         # Mock options expiration dates
         mock_ticker_instance.options = ["2024-03-15", "2024-04-19", "2024-06-21"]

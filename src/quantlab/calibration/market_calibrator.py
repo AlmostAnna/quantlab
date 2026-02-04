@@ -4,8 +4,12 @@ Market-calibrated data generator for deep hedging evaluation.
 This module calibrates stochastic models to publicly available market data
 and generates synthetic paths for model evaluation.
 """
+import hashlib
+import json
+import pickle
 import warnings
 from datetime import datetime
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -24,14 +28,18 @@ warnings.filterwarnings("ignore")
 class MarketCalibrator:
     """Calibrates Heston model to market data for realistic synthetic data generation."""  # noqa: E501
 
-    def __init__(self, risk_free_rate=None):
+    def __init__(self, risk_free_rate=None, cache_dir="./cache"):
         """
-        Initialize with optional risk-free rate.
+        Initialize with optional risk-free rate and cache directory.
 
         Args:
             risk_free_rate: Risk free rate.
                         If None, will fetch from Treasury data.
+            cache_dir: Directory to store cached calibrated processes and paths
         """
+        self.cache_dir = Path(cache_dir)
+        self.cache_dir.mkdir(exist_ok=True)
+
         if risk_free_rate is None:
             self.risk_free_rate = self._fetch_risk_free_rate()
         else:
@@ -67,6 +75,184 @@ class MarketCalibrator:
                 return 0.045  # Short-term rate
             else:
                 return 0.050  # Long-term rate
+
+    def _generate_cache_key(self, ticker, maturity, n_steps, use_options_if_available):
+        """Generate a unique cache key for the given parameters."""
+        params_str = f"{ticker}_{maturity}_{n_steps}_{use_options_if_available}_{self.risk_free_rate}"  # noqa: E501
+        return hashlib.md5(params_str.encode()).hexdigest()
+
+    def _get_calibrated_process_cache_path(self, cache_key):
+        """Get the path for cached calibrated process."""
+        return self.cache_dir / f"calibrated_process_{cache_key}.pkl"
+
+    def _get_paths_cache_path(self, cache_key, n_paths):
+        """Get the path for cached paths."""
+        return self.cache_dir / f"market_calibrated_paths_{cache_key}_n{n_paths}.pt"
+
+    def _get_metadata_path(self, cache_key):
+        """Get the path for cache metadata."""
+        return self.cache_dir / f"market_calibrated_metadata_{cache_key}.json"
+
+    def load_cached_calibrated_process(
+        self, ticker="SPY", maturity=1.0, n_steps=252, use_options_if_available=True
+    ):
+        """
+        Load cached calibrated process if available.
+
+        Args:
+            ticker: Equity symbol used for calibration
+            maturity: Time to maturity in years
+            n_steps: Number of time steps per path
+            use_options_if_available: Whether to use options data for calibration
+
+        Returns:
+            Calibrated HestonProcess and bool indicating if cached
+        """
+        cache_key = self._generate_cache_key(
+            ticker, maturity, n_steps, use_options_if_available
+        )
+        cache_path = self._get_calibrated_process_cache_path(cache_key)
+        metadata_path = self._get_metadata_path(cache_key)
+
+        if cache_path.exists() and metadata_path.exists():
+            # Verify metadata matches
+            with open(metadata_path, "r") as f:
+                metadata = json.load(f)
+
+            expected_metadata = {
+                "ticker": ticker,
+                "maturity": maturity,
+                "n_steps": n_steps,
+                "use_options_if_available": use_options_if_available,
+                "risk_free_rate": self.risk_free_rate,
+            }
+
+            if metadata.get("calibration_parameters") == expected_metadata:
+                print(f"Loading cached calibrated process from {cache_path}")
+                with open(cache_path, "rb") as f:
+                    return pickle.load(f), True
+
+        print(f"No cached calibrated process found for {ticker}, {maturity}y maturity")
+        return None, False
+
+    def save_calibrated_process_to_cache(
+        self,
+        process,
+        ticker="SPY",
+        maturity=1.0,
+        n_steps=252,
+        use_options_if_available=True,
+    ):
+        """
+        Save calibrated process to cache.
+
+        Args:
+            process: Calibrated HestonProcess object
+            ticker: Equity symbol used for calibration
+            maturity: Time to maturity in years
+            n_steps: Number of time steps per path
+            use_options_if_available: Whether options data was used
+        """
+        cache_key = self._generate_cache_key(
+            ticker, maturity, n_steps, use_options_if_available
+        )
+        cache_path = self._get_calibrated_process_cache_path(cache_key)
+        metadata_path = self._get_metadata_path(cache_key)
+
+        # Save process
+        with open(cache_path, "wb") as f:
+            pickle.dump(process, f)
+
+        # Save metadata
+        metadata = {
+            "ticker": ticker,
+            "maturity": maturity,
+            "n_steps": n_steps,
+            "use_options_if_available": use_options_if_available,
+            "risk_free_rate": self.risk_free_rate,
+            "generated_at": datetime.now().isoformat(),
+            "calibration_method": "market_calibrated_heston",
+            "calibration_parameters": {
+                "ticker": ticker,
+                "maturity": maturity,
+                "n_steps": n_steps,
+                "use_options_if_available": use_options_if_available,
+                "risk_free_rate": self.risk_free_rate,
+            },
+        }
+
+        with open(metadata_path, "w") as f:
+            json.dump(metadata, f, indent=2)
+
+        print(f"Saved calibrated process to cache: {cache_path}")
+
+    def load_cached_paths(
+        self,
+        ticker="SPY",
+        n_paths=10000,
+        maturity=1.0,
+        n_steps=252,
+        use_options_if_available=True,
+    ):
+        """
+        Load cached market-calibrated paths if available.
+
+        Args:
+            ticker: Equity symbol used for calibration
+            n_paths: Number of paths to generate/load
+            maturity: Time to maturity in years
+            n_steps: Number of time steps per path
+            use_options_if_available: Whether options data was used for calibration
+
+        Returns:
+            torch.Tensor of paths and bool indicating if cached
+        """
+        cache_key = self._generate_cache_key(
+            ticker, maturity, n_steps, use_options_if_available
+        )
+        cache_path = self._get_paths_cache_path(cache_key, n_paths)
+
+        if cache_path.exists():
+            print(f"Loading cached paths from {cache_path}")
+            import torch
+
+            return torch.load(cache_path), True
+
+        print(
+            f"No cached paths found for {ticker}, {n_paths} paths, {maturity}y maturity"
+        )
+        return None, False
+
+    def save_paths_to_cache(
+        self,
+        paths,
+        ticker="SPY",
+        n_paths=10000,
+        maturity=1.0,
+        n_steps=252,
+        use_options_if_available=True,
+    ):
+        """
+        Save generated paths to cache.
+
+        Args:
+            paths: torch.Tensor of generated paths
+            ticker: Equity symbol used for calibration
+            n_paths: Number of paths
+            maturity: Time to maturity in years
+            n_steps: Number of time steps
+            use_options_if_available: Whether options data was used
+        """
+        cache_key = self._generate_cache_key(
+            ticker, maturity, n_steps, use_options_if_available
+        )
+        cache_path = self._get_paths_cache_path(cache_key, n_paths)
+
+        import torch
+
+        # Save paths
+        torch.save(paths, cache_path)
+        print(f"Saved {n_paths} paths to cache: {cache_path}")
 
     def _fetch_option_chain(self, ticker="SPY"):
         """Fetch option chain data for calibration."""
@@ -292,48 +478,112 @@ class MarketCalibrator:
         """
         print(f"Calibrating Heston model to {ticker} market data...")
 
+        # Check if we have cached calibrated process
+        # Use 1y maturity, 252 steps as proxy for calibration cache
+        cached_process, is_cached = self.load_cached_calibrated_process(
+            ticker, 1.0, 252, use_options_if_available
+        )
+
+        if is_cached:
+            return cached_process
+
         if use_options_if_available:
             strikes, maturities, ivs, S0 = self._fetch_option_chain(ticker)
 
             if strikes is not None and len(strikes) > 5:  # Have enough option data
                 print(f"Found {len(strikes)} option quotes, using for calibration...")
-                return self._calibrate_from_options(strikes, maturities, ivs, S0)
+                calibrated_process = self._calibrate_from_options(
+                    strikes, maturities, ivs, S0
+                )
+            else:
+                print(
+                    "Insufficient option data, falling back to equity-based calibration..."  # noqa: E501
+                )
+                calibrated_process = self._calibrate_from_equity_prices(ticker, period)
+        else:
+            print("Using equity price data for calibration...")
+            calibrated_process = self._calibrate_from_equity_prices(ticker, period)
 
-        print("Using equity price data for calibration...")
-        return self._calibrate_from_equity_prices(ticker, period)
+        # Cache the calibrated process
+        self.save_calibrated_process_to_cache(
+            calibrated_process, ticker, 1.0, 252, use_options_if_available
+        )
+
+        return calibrated_process
 
 
 def generate_market_calibrated_paths(
-    ticker="SPY", n_paths=10000, maturity=1.0, n_steps=252
+    ticker="SPY",
+    n_paths=10000,
+    maturity=1.0,
+    n_steps=252,
+    use_cache=True,
+    use_options_if_available=True,
 ):
     """
     Generate market-calibrated synthetic paths for evaluation.
+
+    Optionally load from cache if available.
 
     Args:
         ticker: Equity symbol to calibrate to
         n_paths: Number of paths to generate
         maturity: Time to maturity in years
         n_steps: Number of time steps per path
+        use_cache: Whether to use cached paths if available
+        use_options_if_available: Whether to try option data for calibration
 
     Returns:
         torch.Tensor of shape (n_paths, n_steps + 1) containing asset paths
     """
     calibrator = MarketCalibrator()
-    calibrated_process = calibrator.calibrate_to_market_data(ticker, period="2y")
 
+    # Check if we have cached paths
+    if use_cache:
+        cached_paths, is_cached = calibrator.load_cached_paths(
+            ticker, n_paths, maturity, n_steps, use_options_if_available
+        )
+        if is_cached:
+            return cached_paths
+
+    # Calibrate model
+    calibrated_process = calibrator.calibrate_to_market_data(
+        ticker, period="2y", use_options_if_available=use_options_if_available
+    )
+
+    # Generate paths
+    print(f"Generating {n_paths} paths with {n_steps} steps...")
     paths, _ = simulate_heston_paths_torch(
         calibrated_process, T=maturity, N=n_paths, M=n_steps, device="cpu"
     )
+
+    if use_cache:
+        calibrator.save_paths_to_cache(
+            paths, ticker, n_paths, maturity, n_steps, use_options_if_available
+        )
 
     return paths.float()
 
 
 if __name__ == "__main__":
     try:
+        # Example usage with caching
+        print("Generating paths with caching enabled...")
         paths = generate_market_calibrated_paths(
             "SPY", n_paths=100, maturity=1.0, n_steps=252
         )
         print(f"Generated paths shape: {paths.shape}")
         print(f"Sample path: {paths[0, :10]}")  # First 10 points of first path
+
+        # Try loading the same paths (should use cache)
+        import torch
+
+        print("\nTrying to load cached paths...")
+        cached_paths = generate_market_calibrated_paths(
+            "SPY", n_paths=100, maturity=1.0, n_steps=252
+        )
+        print(f"Cached paths shape: {cached_paths.shape}")
+        print(f"Are they the same? {torch.allclose(paths, cached_paths)}")
+
     except Exception as e:
         print(f"Error in generation: {e}")
