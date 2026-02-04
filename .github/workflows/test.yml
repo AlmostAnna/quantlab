@@ -42,5 +42,5 @@ jobs:
 
     - name: Run tests
       run: |
-        pytest tests/ -v --cov=src --cov=ml --cov-report=xml --cov-report=term
+        pytest tests/ -v --cov=src --cov=ml --cov=scripts --cov-report=xml --cov-report=term
       shell: bash -l {0}

@@ -47,6 +47,7 @@ addopts = """
     --doctest-modules
     --cov=src/quantlab
     --cov=ml
+    --cov=scripts
     --cov-report=term-missing
     --cov-report=html
 """
@@ -58,7 +59,7 @@ markers = [
 ]
 
 [tool.coverage.run]
-source = ["src", "ml"]
+source = ["src", "ml", "scripts"]
 omit = ["tests/*", "*/__pycache__/*", "*.pyc"]
 disable_warnings = ["no-data-collected", "module-not-imported"]
 
