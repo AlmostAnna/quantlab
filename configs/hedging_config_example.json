@@ -1,0 +1,16 @@
+{
+  "strike_price": 100.0,
+  "time_to_maturity": 1.0,
+  "num_rebalancing_periods": 252,
+  "transaction_cost": 0.001,
+  "training_params": {
+    "epochs": 100,
+    "learning_rate": 0.001,
+    "hidden_dim": 64,
+    "batch_size": 32
+  },
+  "evaluation_params": {
+    "metrics": ["mean_abs_pnl", "std_pnl", "sharpe_ratio"],
+    "confidence_level": 0.95
+  }
+}
