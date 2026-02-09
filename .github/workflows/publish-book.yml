@@ -53,7 +53,7 @@ jobs:
           conda env update --file environment.yml --prune
           conda activate quantlab
           conda info --envs
-          
+
           # Register the conda environment as a Jupyter kernel
           python -m ipykernel install --user --name quantlab --display-name "Python (quantlab)"
 
@@ -64,10 +64,11 @@ jobs:
           # Verify kernel is available
           echo "Available kernels:"
           jupyter kernelspec list
-          
+
           # Execute notebooks to populate outputs for MyST rendering
           # Only execute notebooks that need outputs
           jupyter nbconvert --execute --inplace --to notebook notebooks/Heston_Model_Calibration_Pricing_Hedging.ipynb || echo "Heston notebook not found or not executed"
+          jupyter nbconvert --execute --inplace --to notebook notebooks/COS_Method_Fourier_Pricing.ipynb || echo "COS notebook not found or not executed"
 
       - name: Build HTML Assets
         shell: bash -l {0}
