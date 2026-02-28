@@ -15,3 +15,11 @@ Thumbs.db
 
 # MyST build outputs
 _build
+
+*.coverage
+coverage.xml
+
+*.egg-info/
+
+cache/
+results/
