@@ -5,7 +5,7 @@ This module contains functions for simulating delta hedging strategies
 under various models.
 """
 import numpy as np
-import py_vollib.black_scholes.greeks.analytical as bs_greeks
+import vollib.black_scholes.greeks.analytical as bs_greeks
 from scipy.interpolate import RegularGridInterpolator
 
 from quantlab.hedging.greeks import heston_delta_bump_revalue

@@ -1,17 +1,17 @@
 """
 Data generation helper module.
 
-This module contains convinience wrappers for py_vollib.
+This module contains convinience wrappers for vollib.
 """
 import numpy as np
-from py_vollib.black.implied_volatility import (
+from vollib.black.implied_volatility import (
     implied_volatility_of_undiscounted_option_price,
 )
 
 
-def _price_to_iv_py_vollib(price, S, K, T, r, q=0.0):
+def _price_to_iv_vollib(price, S, K, T, r, q=0.0):
     """
-    Convert option price to implied volatility using py_vollib.
+    Convert option price to implied volatility using vollib.
 
     Parameters
     ----------
@@ -36,11 +36,11 @@ def _price_to_iv_py_vollib(price, S, K, T, r, q=0.0):
     if price <= 0:
         return np.nan
 
-    # py_vollib expects undiscounted price: multiply by exp(r*T)
+    # vollib expects undiscounted price: multiply by exp(r*T)
     undiscounted_price = price * np.exp(r * T)
 
     try:
-        # py_vollib uses forward price: F = S * exp((r-q)*T)
+        # vollib uses forward price: F = S * exp((r-q)*T)
         F = S * np.exp((r - q) * T)
         iv = implied_volatility_of_undiscounted_option_price(
             undiscounted_price, F, K, T, "c"  # 'c' for call

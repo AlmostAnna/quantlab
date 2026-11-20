@@ -15,7 +15,7 @@ dependencies = [
     "scipy",
     "torch",
     "matplotlib",
-    "py_vollib",
+    "vollib>=1.0.11",
     "yfinance",
 ]
 

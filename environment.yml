@@ -20,7 +20,7 @@ dependencies:
     - nest-asyncio  # Helps fix event loop issues in Jupyter
     - torch
     - scikit-learn
-    - py_vollib
+    - vollib==1.0.11
     - numba
     - QuantLib
     - statsmodels

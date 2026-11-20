@@ -6,10 +6,10 @@ This module contains implementation of Heston model parameters recovery.
 from typing import Any, Callable, Dict, Tuple, Union
 
 import numpy as np
-from py_vollib.black.implied_volatility import (
+from scipy.optimize import differential_evolution, minimize
+from vollib.black.implied_volatility import (
     implied_volatility_of_undiscounted_option_price,
 )
-from scipy.optimize import differential_evolution, minimize
 
 from quantlab.calibration.utils import (
     safe_implied_volatility_of_undiscounted_price as safe_iv_of_undiscounted_price,

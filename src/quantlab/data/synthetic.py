@@ -4,7 +4,7 @@ Market data simulators.
 This module contains implementation of various data simulators.
 """
 import numpy as np
-from py_vollib.black.implied_volatility import (
+from vollib.black.implied_volatility import (
     implied_volatility_of_undiscounted_option_price,
 )
 
@@ -14,7 +14,7 @@ from quantlab.models.heston.closed_form import heston_call_price
 from quantlab.models.heston.model import HestonParameters, HestonProcess
 from quantlab.pricing.heston.cos import price as cos_price
 
-# Vectorize py_vollib for batch IV calculation
+# Vectorize vollib for batch IV calculation
 implied_volatility_vec = np.vectorize(implied_volatility_of_undiscounted_option_price)
 
 
@@ -118,7 +118,7 @@ def generate_heston_vol_surface(
         if add_noise:
             print("Warning: add_noise is ignored when output_format='prices'.")
     elif output_format == "implied_vols":
-        # --- Convert Prices to IV using py_vollib ---
+        # --- Convert Prices to IV using vollib ---
         # 1. Calculate forward prices and discount factors
         forward_prices = market_state.stock_price * np.exp(
             market_state.interest_rate * times_to_expiry_flat
@@ -128,7 +128,7 @@ def generate_heston_vol_surface(
         # 2. Convert discounted prices to undiscounted prices
         undiscounted_prices = prices_flat / discount_factors
 
-        # 3. Use py_vollib to get IV
+        # 3. Use vollib to get IV
         iv_flat = implied_volatility_vec(
             undiscounted_prices,
             forward_prices,

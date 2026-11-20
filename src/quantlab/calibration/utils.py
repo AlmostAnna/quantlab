@@ -6,9 +6,9 @@ This module contains helper functions for calibration pipelines.
 from typing import Any, Callable, Dict
 
 import numpy as np
-from py_vollib.black import black
-from py_vollib.black.greeks.analytical import vega as bs_vega
-from py_vollib.black.implied_volatility import (
+from vollib.black import black
+from vollib.black.greeks.analytical import vega as bs_vega
+from vollib.black.implied_volatility import (
     implied_volatility_of_undiscounted_option_price,
 )
 
