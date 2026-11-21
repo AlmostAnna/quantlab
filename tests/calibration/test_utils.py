@@ -1,7 +1,14 @@
 """Tests for calibration utilities module."""
-import numpy as np
+from unittest.mock import patch
 
-from quantlab.calibration.utils import calculate_vega_weights
+import numpy as np
+import pytest
+from vollib.black import undiscounted_black
+
+from quantlab.calibration.utils import (
+    calculate_vega_weights,
+    safe_implied_volatility_of_undiscounted_price,
+)
 
 
 def test_calculate_vega_weights():
@@ -81,3 +88,58 @@ def test_calculate_vega_weights_different_maturities():
 
     # Longer maturity should have higher vega
     assert weights[0] < weights[1] < weights[2], "Vega should increase with maturity"
+
+
+PRIMARY_IV = (
+    "quantlab.calibration.utils.implied_volatility_of_undiscounted_option_price"
+)
+
+F, T = 100.0, 1.0
+# The fallback stops at |price error| < 1e-8. At the deep-ITM/OTM low-vol corner
+# vega ~ 1.7e-3, so 1e-8 in price space is ~6e-6 in vol space -> assert abs=1e-5.
+IV_TOL = 1e-5
+
+
+@pytest.mark.parametrize("flag", ["c", "p"])
+@pytest.mark.parametrize("K", [80.0, 100.0, 120.0])  # ITM / ATM / OTM
+@pytest.mark.parametrize("sigma", [0.05, 0.20, 0.80])
+def test_fallback_bisection_recovers_known_vol(sigma, K, flag):
+    """Test that primary raises -> bisection still inverts price back to the true vol."""  # noqa: E501
+    price = undiscounted_black(F, K, sigma, T, flag)
+    with patch(PRIMARY_IV, side_effect=RuntimeError("force fallback")) as primary:
+        iv = safe_implied_volatility_of_undiscounted_price(price, F, K, T, flag)
+    primary.assert_called_once()  # prove we actually exercised the fallback
+    assert iv == pytest.approx(sigma, abs=IV_TOL)
+
+
+@pytest.mark.parametrize(
+    "bad_output", [float("nan"), 1e308, -1e308], ids=["nan", "above_max", "below_min"]
+)
+def test_fallback_triggered_by_invalid_primary_output(bad_output):
+    """Test that NaN / Jaeckel-style sentinels are treated as failure, not returned as IV."""  # noqa: E501
+    price = undiscounted_black(F, 100.0, 0.20, T, "c")
+    with patch(PRIMARY_IV, return_value=bad_output):
+        iv = safe_implied_volatility_of_undiscounted_price(price, F, 100.0, T, "c")
+    assert iv == pytest.approx(0.20, abs=IV_TOL)
+
+
+@pytest.mark.parametrize(
+    "flag,Fx,Kx",
+    [("c", 100.0, 100.0), ("c", 110.0, 100.0), ("p", 100.0, 100.0), ("p", 90.0, 100.0)],
+)
+def test_fallback_near_intrinsic_returns_min_iv(flag, Fx, Kx):
+    """Test that at intrinsic there is no meaningful IV -> min_iv (guard, not bisection)."""  # noqa: E501
+    intrinsic = max(Fx - Kx, 0.0) if flag == "c" else max(Kx - Fx, 0.0)
+    with patch(PRIMARY_IV, side_effect=RuntimeError("force fallback")):
+        iv = safe_implied_volatility_of_undiscounted_price(
+            intrinsic + 1e-12, Fx, Kx, T, flag
+        )
+    assert iv == 1e-6
+
+
+def test_primary_success_skips_fallback():
+    """Test a valid primary result is returned untouched; the fallback never runs."""
+    with patch(PRIMARY_IV, return_value=0.1234) as primary:
+        iv = safe_implied_volatility_of_undiscounted_price(5.6, F, 100.0, T, "c")
+    primary.assert_called_once()
+    assert iv == 0.1234

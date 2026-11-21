@@ -6,7 +6,7 @@ This module contains helper functions for calibration pipelines.
 from typing import Any, Callable, Dict
 
 import numpy as np
-from vollib.black import black
+from vollib.black import undiscounted_black
 from vollib.black.greeks.analytical import vega as bs_vega
 from vollib.black.implied_volatility import (
     implied_volatility_of_undiscounted_option_price,
@@ -147,9 +147,7 @@ def safe_implied_volatility_of_undiscounted_price(
                 mid = (low + high) / 2
                 # Use Black model for bisection
                 try:
-                    price_at_mid = black(
-                        flag, F, K, T, mid, 0.0
-                    )  # r=q=0 for undiscounted
+                    price_at_mid = undiscounted_black(F, K, mid, T, flag)
                 except ZeroDivisionError:
                     # If Black model fails with T=0, use minimum vol
                     if T <= tolerance:
